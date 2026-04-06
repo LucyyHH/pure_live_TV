@@ -70,7 +70,10 @@ class VideoController with ChangeNotifier {
   Timer? showChangeNameTimer;
   Timer? doubleClickTimer;
   late ScrollController scrollController;
-  late StreamSubscription<String?> _errorSub;
+  final List<StreamSubscription<dynamic>> _subscriptions = [];
+  StreamSubscription<String?>? _errorSub;
+  Future<void>? _destroyFuture;
+  bool _disposed = false;
 
   // ==================== 焦点管理 ====================
   final AppFocusNode focusNode = AppFocusNode();
@@ -162,40 +165,40 @@ class VideoController with ChangeNotifier {
   /// 初始化事件监听
   void _initListeners() {
     // 控制器显示状态监听
-    showController.listen((show) {
+    _trackSubscription(showController.listen((show) {
       if (show) showChangeNameFlag.value = false;
-    });
+    }));
 
     // 画质面板监听
-    showQualityPanel.listen((show) {
+    _trackSubscription(showQualityPanel.listen((show) {
       if (show) {
         // 直接调用扩展方法
         hideAllPanelsExcept(PanelType.quality);
       } else {
         disableController();
       }
-    });
-    showLinePanel.listen((show) {
+    }));
+    _trackSubscription(showLinePanel.listen((show) {
       if (show) {
         // 直接调用扩展方法
         hideAllPanelsExcept(PanelType.lines);
       } else {
         disableController();
       }
-    });
+    }));
 
     // 设置面板监听
-    showSettting.listen((show) {
+    _trackSubscription(showSettting.listen((show) {
       if (show) {
         // 直接调用扩展方法
         hideAllPanelsExcept(PanelType.settings);
       } else {
         disableController();
       }
-    });
+    }));
 
     // 播放列表面板监听
-    showPlayListPanel.listen((show) {
+    _trackSubscription(showPlayListPanel.listen((show) {
       if (show) {
         // 直接调用扩展方法
         hideAllPanelsExcept(PanelType.playlist);
@@ -204,23 +207,23 @@ class VideoController with ChangeNotifier {
         beforePlayNodeIndex.value = settings.currentPlayListNodeIndex.value;
         disableController();
       }
-    });
+    }));
 
     // 播放列表索引监听
-    beforePlayNodeIndex.listen((index) {
+    _trackSubscription(beforePlayNodeIndex.listen((index) {
       if (showPlayListPanel.value) scrollToIndex(index);
-    });
+    }));
 
     // 底部按钮索引监听
-    currentNodeIndex.listen((index) {
+    _trackSubscription(currentNodeIndex.listen((index) {
       currentBottomClickType.value = BottomButtonClickType.values[index];
       log("currentBottomClickType: ${currentBottomClickType.value.toString()}");
-    });
+    }));
 
     // 弹幕设置索引监听
-    danmukuNodeIndex.listen((index) {
+    _trackSubscription(danmukuNodeIndex.listen((index) {
       currentDanmakuClickType.value = DanmakuSettingClickType.values[index];
-    });
+    }));
   }
 
   /// 初始化播放器
@@ -260,6 +263,7 @@ class VideoController with ChangeNotifier {
       // 3. 其他未知错误
       log("Unhandled Player Error: $error");
     });
+    _trackSubscription(_errorSub!);
   }
 
   /// 初始化名称显示定时器
@@ -273,12 +277,12 @@ class VideoController with ChangeNotifier {
   // ==================== 核心业务方法 ====================
   /// 刷新播放
   Future<void> refresh() async {
-    _handlePlayerReload(() => livePlayController.onInitPlayerState(reloadDataType: ReloadDataType.refreash));
+    await _handlePlayerReload(() => livePlayController.onInitPlayerState(reloadDataType: ReloadDataType.refreash));
   }
 
   /// 切换播放线路
   Future<void> changeLine(int index) async {
-    _handlePlayerReload(
+    await _handlePlayerReload(
       () => livePlayController.onInitPlayerState(reloadDataType: ReloadDataType.changeLine, line: index),
     );
     showLinePanel.value = false;
@@ -286,7 +290,7 @@ class VideoController with ChangeNotifier {
 
   /// 切换画质
   Future<void> changeQuality(int qualityIndex) async {
-    _handlePlayerReload(
+    await _handlePlayerReload(
       () => livePlayController.onInitPlayerState(
         reloadDataType: ReloadDataType.changeQuality,
         line: currentLineIndex,
@@ -332,10 +336,10 @@ class VideoController with ChangeNotifier {
 
   // ==================== 私有工具方法 ====================
   /// 处理播放器重载
-  Future<void> _handlePlayerReload(VoidCallback reloadAction) async {
+  Future<void> _handlePlayerReload(Future<dynamic> Function() reloadAction) async {
     isLoading.value = true;
     await destroy();
-    reloadAction();
+    await reloadAction();
   }
 
   /// 切换频道通用逻辑
@@ -392,34 +396,67 @@ class VideoController with ChangeNotifier {
     danmakuController = controller;
   }
 
+  void trackSubscription(StreamSubscription<dynamic> subscription) {
+    if (_disposed) {
+      unawaited(subscription.cancel());
+      return;
+    }
+    _subscriptions.add(subscription);
+  }
+
+  void _trackSubscription(StreamSubscription<dynamic> subscription) {
+    trackSubscription(subscription);
+  }
+
   // ==================== 资源释放 ====================
   /// 销毁控制器资源
   Future<void> destroy() async {
-    // 取消焦点
-    cancelFocus();
-    cancelDanmakuFocus();
-    livePlayController.liveDanmaku.stop();
-    // 重置播放状态
-    livePlayController.success.value = false;
+    if (_destroyFuture != null) {
+      return _destroyFuture!;
+    }
 
-    // 取消订阅
-    await _errorSub.cancel();
-    // 停止播放器
-    globalPlayer.stop();
+    final completer = Completer<void>();
+    _destroyFuture = completer.future;
 
-    // 取消所有定时器
-    showControllerTimer?.cancel();
-    showChangeNameTimer?.cancel();
-    doubleClickTimer?.cancel();
+    try {
+      _disposed = true;
 
-    // 释放滚动控制器
-    scrollController.dispose();
+      // 取消焦点
+      cancelFocus();
+      cancelDanmakuFocus();
+      await livePlayController.liveDanmaku.stop();
+      livePlayController.success.value = false;
+
+      for (final subscription in _subscriptions) {
+        await subscription.cancel();
+      }
+      _subscriptions.clear();
+      _errorSub = null;
+
+      showControllerTimer?.cancel();
+      showControllerTimer = null;
+      showChangeNameTimer?.cancel();
+      showChangeNameTimer = null;
+      doubleClickTimer?.cancel();
+      doubleClickTimer = null;
+
+      if (scrollController.hasClients) {
+        scrollController.jumpTo(scrollController.offset);
+      }
+      scrollController.dispose();
+      focusNode.dispose();
+      danmukuFocusNode.dispose();
+
+      await globalPlayer.stop();
+    } finally {
+      completer.complete();
+    }
   }
 
   /// 生命周期释放
   @override
-  void dispose() async {
-    await destroy();
+  void dispose() {
+    unawaited(destroy());
     super.dispose();
   }
 }

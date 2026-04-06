@@ -4,25 +4,12 @@ import 'package:pure_live/plugins/emoji_manager.dart';
 import 'package:pure_live/pkg/canvas_danmaku/models/danmaku_content_item.dart';
 
 class Utils {
-  // 计算混合内容的总宽度
-  static double calculateMixedContentWidth(DanmakuContentItem content, double fontSize) {
-    double totalWidth = 0;
-    final emojiSize = fontSize * 1.2;
-    for (final item in content.mixedContent) {
-      if (item.type == ContentType.text) {
-        // 计算文本宽度
-        final textSpan = TextSpan(
-          text: item.value,
-          style: TextStyle(fontSize: fontSize),
-        );
-        final textPainter = TextPainter(text: textSpan, textDirection: TextDirection.ltr)..layout();
-        totalWidth += textPainter.width;
-      } else {
-        totalWidth += emojiSize;
-      }
-    }
-    return totalWidth;
-  }
+  static final Paint _emojiPaint = Paint()..filterQuality = FilterQuality.high;
+
+  static final Paint _strokeForeground = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 0.8
+    ..color = Colors.black54;
 
   static void drawMixedContent(
     Canvas canvas,
@@ -38,36 +25,23 @@ class Utils {
     final currentY = offset.dy;
     final emojiSize = fontSize * 1.2;
 
-    // 绘制自发送弹幕的边框（如果需要）
     if (selfSend && selfSendPaint != null) {
-      final totalWidth = calculateMixedContentWidth(content, fontSize);
+      double totalWidth = 0;
+      for (final item in content.mixedContent) {
+        if (item.type == ContentType.text) {
+          final painter = _ensurePainterCached(item, content.color, fontSize, fontWeight);
+          totalWidth += painter.width;
+        } else {
+          totalWidth += emojiSize;
+        }
+      }
       canvas.drawRect(Rect.fromLTWH(currentX, currentY, totalWidth, fontSize), selfSendPaint);
     }
 
-    // 绘制实际内容（文本和表情）
     for (final item in content.mixedContent) {
       if (item.type == ContentType.text) {
-        final textPainter = TextPainter(
-          text: TextSpan(
-            text: item.value,
-            style: TextStyle(color: content.color, fontSize: fontSize, fontWeight: FontWeight.values[fontWeight]),
-          ),
-          textDirection: TextDirection.ltr,
-        )..layout();
-        final strokePainter = TextPainter(
-          text: TextSpan(
-            text: item.value,
-            style: TextStyle(
-              fontSize: fontSize,
-              fontWeight: FontWeight.values[fontWeight],
-              foreground: Paint()
-                ..style = PaintingStyle.stroke
-                ..strokeWidth = 0.8
-                ..color = Colors.black54, // 这里已经通过foreground设置了颜色
-            ),
-          ),
-          textDirection: TextDirection.ltr,
-        )..layout();
+        final textPainter = _ensurePainterCached(item, content.color, fontSize, fontWeight);
+        final strokePainter = _ensureStrokePainterCached(item, fontSize, fontWeight);
         strokePainter.paint(canvas, Offset(currentX, currentY));
         textPainter.paint(canvas, Offset(currentX, currentY));
         currentX += textPainter.width;
@@ -78,22 +52,43 @@ class Utils {
             image,
             Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
             Rect.fromLTWH(currentX, currentY, emojiSize, emojiSize),
-            Paint()..filterQuality = FilterQuality.high,
+            _emojiPaint,
           );
         } else {
-          final textPainter = TextPainter(
-            text: TextSpan(
-              text: item.value,
-              style: TextStyle(color: content.color, fontSize: fontSize),
-            ),
-            textDirection: TextDirection.ltr,
-          )..layout();
-
+          final textPainter = _ensurePainterCached(item, content.color, fontSize, fontWeight);
           textPainter.paint(canvas, Offset(currentX, currentY));
         }
         currentX += emojiSize;
       }
     }
+  }
+
+  static TextPainter _ensurePainterCached(MixedContent item, Color color, double fontSize, int fontWeight) {
+    if (item.cachedPainter != null) return item.cachedPainter!;
+    item.cachedPainter = TextPainter(
+      text: TextSpan(
+        text: item.value,
+        style: TextStyle(color: color, fontSize: fontSize, fontWeight: FontWeight.values[fontWeight]),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    return item.cachedPainter!;
+  }
+
+  static TextPainter _ensureStrokePainterCached(MixedContent item, double fontSize, int fontWeight) {
+    if (item.cachedStrokePainter != null) return item.cachedStrokePainter!;
+    item.cachedStrokePainter = TextPainter(
+      text: TextSpan(
+        text: item.value,
+        style: TextStyle(
+          fontSize: fontSize,
+          fontWeight: FontWeight.values[fontWeight],
+          foreground: _strokeForeground,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    return item.cachedStrokePainter!;
   }
 
   static ui.Paragraph generateParagraph(

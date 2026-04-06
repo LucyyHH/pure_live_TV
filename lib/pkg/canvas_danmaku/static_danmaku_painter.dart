@@ -13,10 +13,13 @@ class StaticDanmakuPainter extends CustomPainter {
   final double danmakuHeight;
   final bool running;
   final int tick;
-  final Paint selfSendPaint = Paint()
+  final double opacity;
+  static final Paint _selfSendPaint = Paint()
     ..style = PaintingStyle.stroke
     ..strokeWidth = 1.5
     ..color = Colors.green;
+
+  static final Paint _layerPaint = Paint();
 
   StaticDanmakuPainter(
     this.progress,
@@ -28,11 +31,23 @@ class StaticDanmakuPainter extends CustomPainter {
     this.showStroke,
     this.danmakuHeight,
     this.running,
-    this.tick,
-  );
+    this.tick, {
+    this.opacity = 1.0,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (opacity < 1.0) {
+      _layerPaint.color = Color.fromRGBO(0, 0, 0, opacity);
+      canvas.saveLayer(null, _layerPaint);
+    }
+    _paintContent(canvas, size);
+    if (opacity < 1.0) {
+      canvas.restore();
+    }
+  }
+
+  void _paintContent(Canvas canvas, Size size) {
     // 绘制顶部弹幕
     for (var item in topDanmakuItems) {
       item.xPosition = (size.width - item.width) / 2;
@@ -50,7 +65,7 @@ class StaticDanmakuPainter extends CustomPainter {
         canvas.drawRect(
           Offset(item.xPosition, item.yPosition).translate(-2, 2) &
               (Size(item.width, item.height) + const Offset(4, 0)),
-          selfSendPaint,
+          _selfSendPaint,
         );
       }
       // 白色部分
@@ -76,7 +91,7 @@ class StaticDanmakuPainter extends CustomPainter {
         canvas.drawRect(
           Offset(item.xPosition, (size.height - item.yPosition - danmakuHeight)).translate(-2, 2) &
               (Size(item.width, item.height) + const Offset(4, 0)),
-          selfSendPaint,
+          _selfSendPaint,
         );
       }
 
@@ -91,6 +106,7 @@ class StaticDanmakuPainter extends CustomPainter {
         topDanmakuItems.length != oldDelegate.topDanmakuItems.length ||
         buttomDanmakuItems.length != oldDelegate.buttomDanmakuItems.length ||
         tick != oldDelegate.tick ||
-        fontSize != oldDelegate.fontSize;
+        fontSize != oldDelegate.fontSize ||
+        opacity != oldDelegate.opacity;
   }
 }

@@ -21,7 +21,7 @@ class SwitchableGlobalPlayer {
   final isPlaying = false.obs;
   final isComplete = false.obs;
   final hasError = false.obs;
-  final currentVolume = 1.0.obs;
+  final currentVolume = 0.5.obs;
   final isInPipMode = false.obs;
 
   // --- Internal State Management ---
@@ -29,6 +29,7 @@ class SwitchableGlobalPlayer {
   bool _hasSetVolume = false;
   PlayerEngine _currentEngine = PlayerEngine.mediaKit;
   UnifiedPlayer? _currentPlayer;
+  Future<void>? _cleanupFuture;
 
   final _videoKey = ValueKey('player_${DateTime.now().millisecondsSinceEpoch}').obs;
 
@@ -107,6 +108,7 @@ class SwitchableGlobalPlayer {
       if (currentToken != _loadingToken) return;
 
       _subscribeToPlayerEvents();
+      setVolume(currentVolume.value);
       isInitialized.value = true;
     } catch (e, st) {
       if (currentToken == _loadingToken) {
@@ -201,19 +203,15 @@ class SwitchableGlobalPlayer {
       }
       return KeyedSubtree(
         key: engineKey,
-        child: Material(
+        child: ColoredBox(
           key: ValueKey(settings.videoFitIndex.value),
-          child: Scaffold(
-            backgroundColor: Colors.black,
-            body: Stack(
-              fit: StackFit.passthrough,
-              children: [
-                Container(color: Colors.black),
-                _currentPlayer?.getVideoWidget(settings.videoFitIndex.value, child) ?? const SizedBox(),
-                child ?? const SizedBox(),
-              ],
-            ),
-            resizeToAvoidBottomInset: true,
+          color: Colors.black,
+          child: Stack(
+            fit: StackFit.passthrough,
+            children: [
+              _currentPlayer?.getVideoWidget(settings.videoFitIndex.value, child) ?? const SizedBox(),
+              child ?? const SizedBox(),
+            ],
           ),
         ),
       );
@@ -228,19 +226,30 @@ class SwitchableGlobalPlayer {
   }
 
   Future<void> _cleanup() async {
-    _subscriptions.clear();
-    final player = _currentPlayer;
-    _currentPlayer = null;
+    if (_cleanupFuture != null) {
+      return _cleanupFuture!;
+    }
+
+    final completer = Completer<void>();
+    _cleanupFuture = completer.future;
 
     try {
-      await player?.stop();
-      player?.dispose();
-    } catch (_) {}
+      _subscriptions.clear();
+      final player = _currentPlayer;
+      _currentPlayer = null;
 
-    _resetStatus();
+      await player?.stop();
+      await player?.release();
+    } catch (_) {
+    } finally {
+      _resetStatus();
+      _updateVideoKey();
+      completer.complete();
+      _cleanupFuture = null;
+    }
   }
 
   Future<void> stop() async => await _cleanup();
 
-  void dispose() => _cleanup();
+  Future<void> dispose() async => await _cleanup();
 }

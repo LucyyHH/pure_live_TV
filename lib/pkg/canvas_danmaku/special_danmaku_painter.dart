@@ -1,5 +1,4 @@
 import 'dart:math';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:pure_live/pkg/canvas_danmaku/models/danmaku_item.dart';
 import 'package:pure_live/pkg/canvas_danmaku/models/danmaku_content_item.dart';
@@ -11,7 +10,9 @@ class SpecialDanmakuPainter extends CustomPainter {
   final int fontWeight;
   final bool running;
   final int tick;
-  final int batchThreshold;
+  final double opacity;
+
+  static final Paint _layerPaint = Paint();
 
   SpecialDanmakuPainter(
     this.progress,
@@ -20,36 +21,31 @@ class SpecialDanmakuPainter extends CustomPainter {
     this.fontWeight,
     this.running,
     this.tick, {
-    this.batchThreshold = 10, // 默认值为10，可以自行调整
+    this.opacity = 1.0,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    var pictureCanvas = canvas;
-    var batch = specialDanmakuItems.length > batchThreshold;
-    late ui.PictureRecorder pictureRecorder;
-    if (batch) {
-      pictureRecorder = ui.PictureRecorder();
-      pictureCanvas = Canvas(pictureRecorder);
+    if (opacity < 1.0) {
+      _layerPaint.color = Color.fromRGBO(0, 0, 0, opacity);
+      canvas.saveLayer(null, _layerPaint);
     }
     for (final item in specialDanmakuItems) {
       final elapsed = tick - item.creationTime;
       final content = item.content as SpecialDanmakuContentItem;
       if (elapsed >= 0 && elapsed < content.duration) {
-        _paintSpecialDanmaku(pictureCanvas, content, size, elapsed);
+        _paintSpecialDanmaku(canvas, content, size, elapsed);
       }
     }
-    if (batch) {
-      canvas.drawPicture(pictureRecorder.endRecording());
+    if (opacity < 1.0) {
+      canvas.restore();
     }
   }
 
   void _paintSpecialDanmaku(Canvas canvas, SpecialDanmakuContentItem item, Size size, int elapsed) {
-    // 透明度动画
     late final alpha = item.alphaTween?.transform(elapsed / item.duration) ?? item.color.a;
 
     final color = item.alphaTween == null ? item.color : item.color.withValues(alpha: alpha);
-    // 文本
     if (color != item.painterCache?.text?.style?.color) {
       item.painterCache!.text = TextSpan(
         text: item.text,
@@ -95,6 +91,7 @@ class SpecialDanmakuPainter extends CustomPainter {
     return progress != oldDelegate.progress ||
         specialDanmakuItems.length != oldDelegate.specialDanmakuItems.length ||
         tick != oldDelegate.tick ||
-        fontSize != oldDelegate.fontSize;
+        fontSize != oldDelegate.fontSize ||
+        opacity != oldDelegate.opacity;
   }
 }

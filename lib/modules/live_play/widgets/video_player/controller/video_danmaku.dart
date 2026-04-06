@@ -63,22 +63,22 @@ extension VideoDanmaku on VideoController {
   /// 布尔值持久化监听
   void _listenBool(String key, RxBool rx, RxBool settingRx, bool def, {Function(bool)? onChanged}) {
     rx.value = HivePrefUtil.getBool(key) ?? def;
-    rx.listen((v) {
+    trackSubscription(rx.listen((v) {
       HivePrefUtil.setBool(key, v);
       settingRx.value = v;
       onChanged?.call(v);
-    });
+    }));
   }
 
   /// 浮点值持久化监听
   void _listenDouble(String key, RxDouble rx, RxDouble settingRx, double def, {Function(double)? onChanged}) {
     rx.value = HivePrefUtil.getDouble(key) ?? def;
-    rx.listen((v) {
+    trackSubscription(rx.listen((v) {
       HivePrefUtil.setDouble(key, v);
       settingRx.value = v;
       onChanged?.call(v);
       updateDanmakuConfig();
-    });
+    }));
   }
 
   /// 弹幕参数左调

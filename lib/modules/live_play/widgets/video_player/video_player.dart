@@ -41,7 +41,7 @@ class _VideoPlayerState extends State<VideoPlayer> {
       focusNode: widget.controller.focusNode,
       autofocus: true,
       onKeyEvent: widget.controller.onKeyEvent,
-      child: Scaffold(backgroundColor: Colors.black, body: _buildVideo()),
+      child: ColoredBox(color: Colors.black, child: _buildVideo()),
     );
   }
 }

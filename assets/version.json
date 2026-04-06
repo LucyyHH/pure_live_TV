@@ -1,7 +1,7 @@
 {
-  "version": "2.0.15",
+  "version": "2.0.15.1",
   "version_num": 10508,
-  "version_desc": "-Fixed: 优化UI显示. \n-Added: ExoPlayer播放器",
+  "version_desc": "-Fixed: 修复MPV爆音，修复EXO偶现没有声音，优化播放性能和体验",
   "prerelease":false,
-  "download_url": "https://github.com/liuchuancong/pure_live_TV/releases"
+  "download_url": "https://github.com/LucyyHH/pure_live_TV/releases"
 }

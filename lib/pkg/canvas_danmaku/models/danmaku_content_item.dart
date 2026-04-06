@@ -9,9 +9,19 @@ enum ContentType { text, emoji }
 
 class MixedContent {
   final ContentType type;
-  final String value; // 文本内容或表情key
+  final String value;
+
+  TextPainter? cachedPainter;
+  TextPainter? cachedStrokePainter;
+  double? cachedWidth;
 
   MixedContent(this.type, this.value);
+
+  void clearPainterCache() {
+    cachedPainter = null;
+    cachedStrokePainter = null;
+    cachedWidth = null;
+  }
 }
 
 class DanmakuContentItem {

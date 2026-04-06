@@ -1,14 +1,81 @@
 import 'dart:io';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:isolate';
 import 'dart:typed_data';
 import 'package:brotli/brotli.dart';
 import '../common/binary_writer.dart';
 import 'package:pure_live/core/common/core_log.dart';
 import 'package:pure_live/common/models/live_message.dart';
-import 'package:pure_live/core/common/convert_helper.dart';
 import 'package:pure_live/core/common/web_socket_util.dart';
 import 'package:pure_live/core/interface/live_danmaku.dart';
+
+/// Isolate-safe: decompress + decode + extract chat/superchat from a Bilibili
+/// WebSocket frame.  Returns lightweight maps so we never send non-sendable
+/// objects across the isolate boundary.
+List<Map<String, dynamic>> _parseBiliMessages(List<int> data) {
+  final results = <Map<String, dynamic>>[];
+  try {
+    final protocolVersion = _readInt(data, 6, 2);
+    var body = data.sublist(16);
+
+    if (protocolVersion == 2) {
+      body = zlib.decode(body);
+    } else if (protocolVersion == 3) {
+      body = brotli.decode(body);
+    }
+
+    final text = utf8.decode(body, allowMalformed: true);
+    final group = text.split(RegExp(r"[\x00-\x1f]+", unicode: true, multiLine: true));
+
+    for (final item in group) {
+      if (item.length <= 2 || !item.startsWith('{')) continue;
+      try {
+        final obj = json.decode(item);
+        final cmd = obj["cmd"]?.toString() ?? '';
+        if (cmd.contains("DANMU_MSG")) {
+          final info = obj["info"];
+          if (info != null && (info as List).isNotEmpty) {
+            final message = info[1].toString();
+            final color = (info[0][3] is int) ? info[0][3] as int : 0;
+            if (info[2] != null && (info[2] as List).isNotEmpty) {
+              results.add({
+                't': 'c',
+                'u': info[2][1].toString(),
+                'm': message,
+                'clr': color,
+              });
+            }
+          }
+        } else if (cmd == "SUPER_CHAT_MESSAGE" && obj["data"] != null) {
+          final d = obj["data"];
+          results.add({
+            't': 'sc',
+            'bgBtm': d["background_bottom_color"].toString(),
+            'bg': d["background_color"].toString(),
+            'end': d["end_time"] as int,
+            'face': "${d["user_info"]["face"]}@200w.jpg",
+            'msg': d["message"].toString(),
+            'price': d["price"] as int,
+            'start': d["start_time"] as int,
+            'uname': d["user_info"]["uname"].toString(),
+          });
+        }
+      } catch (_) {}
+    }
+  } catch (_) {}
+  return results;
+}
+
+int _readInt(List<int> buffer, int start, int len) {
+  final bytes = Uint8List.fromList(buffer.sublist(start, start + len));
+  final data = ByteData.view(bytes.buffer);
+  if (len == 1) return data.getUint8(0);
+  if (len == 2) return data.getInt16(0, Endian.big);
+  if (len == 4) return data.getInt32(0, Endian.big);
+  if (len == 8) return data.getInt64(0, Endian.big);
+  return 0;
+}
 
 class BiliBiliDanmakuArgs {
   final int roomId;
@@ -48,8 +115,6 @@ class BiliBiliDanmaku implements LiveDanmaku {
   Function(String msg)? onClose;
   @override
   Function()? onReady;
-
-  // String serverUrl = "wss://broadcastlv.chat.bilibili.com/sub";
 
   WebScoketUtils? webScoketUtils;
   late BiliBiliDanmakuArgs danmakuArgs;
@@ -110,43 +175,27 @@ class BiliBiliDanmaku implements LiveDanmaku {
 
   List<int> encodeData(String msg, int action) {
     var data = utf8.encode(msg);
-    //头部长度固定16
     var length = data.length + 16;
     var buffer = Uint8List(length);
 
     var writer = BinaryWriter([]);
 
-    //数据包长度
     writer.writeInt(buffer.length, 4);
-    //数据包头部长度,固定16
     writer.writeInt(16, 2);
-
-    //协议版本，0=JSON,1=Int32,2=Buffer
     writer.writeInt(0, 2);
-
-    //操作类型
     writer.writeInt(action, 4);
-
-    //数据包头部长度,固定1
-
     writer.writeInt(1, 4);
-
     writer.writeBytes(data);
 
     return writer.buffer;
   }
 
-  void decodeMessage(List<int> data) {
+  void decodeMessage(List<int> data) async {
     try {
-      //协议版本。0为JSON，可以直接解析；1为房间人气值,Body为4位Int32；2为压缩过Buffer，需要解压再处理
-      int protocolVersion = readInt(data, 6, 2);
-      //操作类型。3=心跳回应，内容为房间人气值；5=通知，弹幕、广播等全部信息；8=进房回应，空
-      int operation = readInt(data, 8, 4);
-      //内容
-      var body = data.skip(16).toList();
-      if (operation == 3) {
-        var online = readInt(body, 0, 4);
+      final operation = _readInt(data, 8, 4);
 
+      if (operation == 3) {
+        final online = _readInt(data, 16, 4);
         onMessage?.call(
           LiveMessage(
             type: LiveMessageType.online,
@@ -156,91 +205,44 @@ class BiliBiliDanmaku implements LiveDanmaku {
             userName: "",
           ),
         );
-      } else if (operation == 5) {
-        if (protocolVersion == 2) {
-          body = zlib.decode(body);
-        } else if (protocolVersion == 3) {
-          body = brotli.decode(body);
-        }
+        return;
+      }
 
-        var text = utf8.decode(body, allowMalformed: true);
+      if (operation != 5) return;
 
-        var group = text.split(RegExp(r"[\x00-\x1f]+", unicode: true, multiLine: true));
-        for (var item in group.where((x) => x.length > 2 && x.startsWith('{'))) {
-          parseMessage(item);
+      final parsed = await Isolate.run(() => _parseBiliMessages(data));
+
+      for (final msg in parsed) {
+        final type = msg['t'];
+        if (type == 'c') {
+          final color = msg['clr'] as int;
+          onMessage?.call(LiveMessage(
+            type: LiveMessageType.chat,
+            userName: msg['u'] as String,
+            message: msg['m'] as String,
+            color: color == 0 ? LiveMessageColor.white : LiveMessageColor.numberToColor(color),
+          ));
+        } else if (type == 'sc') {
+          onMessage?.call(LiveMessage(
+            type: LiveMessageType.superChat,
+            userName: "SUPER_CHAT_MESSAGE",
+            message: "SUPER_CHAT_MESSAGE",
+            color: LiveMessageColor.white,
+            data: LiveSuperChatMessage(
+              backgroundBottomColor: msg['bgBtm'] as String,
+              backgroundColor: msg['bg'] as String,
+              endTime: DateTime.fromMillisecondsSinceEpoch((msg['end'] as int) * 1000),
+              face: msg['face'] as String,
+              message: msg['msg'] as String,
+              price: msg['price'] as int,
+              startTime: DateTime.fromMillisecondsSinceEpoch((msg['start'] as int) * 1000),
+              userName: msg['uname'] as String,
+            ),
+          ));
         }
       }
     } catch (e) {
       CoreLog.error(e);
     }
-  }
-
-  void parseMessage(String jsonMessage) {
-    try {
-      var obj = json.decode(jsonMessage);
-      var cmd = obj["cmd"].toString();
-      if (cmd.contains("DANMU_MSG")) {
-        if (obj["info"] != null && obj["info"].length != 0) {
-          var message = obj["info"][1].toString();
-          var color = asT<int?>(obj["info"][0][3]) ?? 0;
-          if (obj["info"][2] != null && obj["info"][2].length != 0) {
-            var username = obj["info"][2][1].toString();
-            var liveMsg = LiveMessage(
-              type: LiveMessageType.chat,
-              userName: username,
-              message: message,
-              color: color == 0 ? LiveMessageColor.white : LiveMessageColor.numberToColor(color),
-            );
-            onMessage?.call(liveMsg);
-          }
-        }
-      } else if (cmd == "SUPER_CHAT_MESSAGE") {
-        if (obj["data"] == null) {
-          return;
-        }
-        LiveSuperChatMessage sc = LiveSuperChatMessage(
-          backgroundBottomColor: obj["data"]["background_bottom_color"].toString(),
-          backgroundColor: obj["data"]["background_color"].toString(),
-          endTime: DateTime.fromMillisecondsSinceEpoch(obj["data"]["end_time"] * 1000),
-          face: "${obj["data"]["user_info"]["face"]}@200w.jpg",
-          message: obj["data"]["message"].toString(),
-          price: obj["data"]["price"],
-          startTime: DateTime.fromMillisecondsSinceEpoch(obj["data"]["start_time"] * 1000),
-          userName: obj["data"]["user_info"]["uname"].toString(),
-        );
-        var liveMsg = LiveMessage(
-          type: LiveMessageType.superChat,
-          userName: "SUPER_CHAT_MESSAGE",
-          message: "SUPER_CHAT_MESSAGE",
-          color: LiveMessageColor.white,
-          data: sc,
-        );
-        onMessage?.call(liveMsg);
-      }
-    } catch (e) {
-      CoreLog.error(e);
-    }
-  }
-
-  int readInt(List<int> buffer, int start, int len) {
-    var bytes = Uint8List.fromList(buffer.getRange(start, start + len).toList());
-    var byteBuffer = bytes.buffer;
-    var data = ByteData.view(byteBuffer);
-    var result = 0;
-
-    if (len == 1) {
-      result = data.getUint8(0);
-    }
-    if (len == 2) {
-      result = data.getInt16(0, Endian.big);
-    }
-    if (len == 4) {
-      result = data.getInt32(0, Endian.big);
-    }
-    if (len == 8) {
-      result = data.getInt64(0, Endian.big);
-    }
-
-    return result;
   }
 }

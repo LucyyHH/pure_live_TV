@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:developer';
 import 'package:get/get.dart';
+import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
 import 'package:pure_live/common/index.dart';
 import 'package:pure_live/app/app_focus_node.dart';
@@ -79,51 +80,86 @@ class LivePlayController extends StateController {
   var isLastLine = false.obs;
 
   var isFirstLoad = true.obs;
+  Future<void>? _disposePlayerFuture;
 
   @override
   void onClose() {
-    disPoserPlayer();
+    doubleClickTimer?.cancel();
+    doubleClickTimer = null;
+    channelTimer?.cancel();
+    channelTimer = null;
+    loadRefreshRoomTimer?.cancel();
+    loadRefreshRoomTimer = null;
+    unawaited(disPoserPlayer());
+    focusNode.dispose();
     super.onClose();
   }
 
   @override
-  dispose() {
-    videoController?.dispose();
+  void dispose() {
     super.dispose();
   }
 
   Future<bool> onBackPressed() async {
-    if (videoController!.showSettting.value) {
-      videoController?.showSettting.value = false;
-      videoController?.focusNode.requestFocus();
-      return await Future.value(false);
+    final vc = videoController;
+    if (vc == null) {
+      return true;
     }
-    if (videoController!.showQualityPanel.value) {
-      videoController?.showQualityPanel.value = false;
-      videoController?.focusNode.requestFocus();
-      return await Future.value(false);
+
+    if (vc.showSettting.value) {
+      vc.showSettting.value = false;
+      vc.focusNode.requestFocus();
+      return false;
     }
-    if (videoController!.showPlayListPanel.value) {
-      videoController?.showPlayListPanel.value = false;
-      videoController?.focusNode.requestFocus();
-      return await Future.value(false);
+    if (vc.showQualityPanel.value) {
+      vc.showQualityPanel.value = false;
+      vc.focusNode.requestFocus();
+      return false;
     }
-    if (videoController!.showLinePanel.value) {
-      videoController?.showLinePanel.value = false;
-      videoController?.focusNode.requestFocus();
-      return await Future.value(false);
+    if (vc.showPlayListPanel.value) {
+      vc.showPlayListPanel.value = false;
+      vc.focusNode.requestFocus();
+      return false;
     }
-    if (videoController!.showController.value) {
-      videoController?.disableController();
-      videoController?.focusNode.requestFocus();
-      return await Future.value(false);
+    if (vc.showLinePanel.value) {
+      vc.showLinePanel.value = false;
+      vc.focusNode.requestFocus();
+      return false;
     }
-    disPoserPlayer();
-    return await Future.value(true);
+    if (vc.showController.value) {
+      vc.disableController();
+      vc.focusNode.requestFocus();
+      return false;
+    }
+
+    if (!doubleClickExit) {
+      lastExitTime = DateTime.now().millisecondsSinceEpoch;
+      doubleClickExit = true;
+      SmartDialog.showToast("再按一次退出直播间");
+      doubleClickTimer?.cancel();
+      doubleClickTimer = Timer(const Duration(milliseconds: 800), () {
+        doubleClickExit = false;
+        lastExitTime = 0;
+        doubleClickTimer?.cancel();
+        doubleClickTimer = null;
+      });
+      return false;
+    }
+
+    doubleClickTimer?.cancel();
+    doubleClickTimer = null;
+    doubleClickExit = false;
+    lastExitTime = 0;
+    await disPoserPlayer();
+    return true;
   }
 
   @override
   void onInit() {
+    PaintingBinding.instance.imageCache
+      ..clear()
+      ..clearLiveImages();
+
     currentPlayRoom.value = room;
     onInitPlayerState(
       reloadDataType: detail.value!.platform == Sites.bilibiliSite
@@ -250,24 +286,34 @@ class LivePlayController extends StateController {
   }
 
   Future<void> disPoserPlayer() async {
+    if (_disposePlayerFuture != null) {
+      return _disposePlayerFuture!;
+    }
+
+    final completer = Completer<void>();
+    _disposePlayerFuture = completer.future;
+
     try {
       // 优先停止弹幕，避免新实例创建前旧实例仍在运行
-      liveDanmaku.stop();
-      liveDanmaku.onMessage = null; // 清空回调，防止内存泄漏
+      await liveDanmaku.stop();
+      liveDanmaku.onMessage = null;
       liveDanmaku.onClose = null;
       liveDanmaku.onReady = null;
 
-      if (videoController != null) {
-        videoController?.dispose();
-        videoController = null;
+      final controller = videoController;
+      videoController = null;
+      if (controller != null) {
+        await controller.destroy();
+        controller.dispose();
       }
       success.value = false;
       isFirstLoad.value = true;
-      focusNode.requestFocus();
-      SwitchableGlobalPlayer().dispose();
-      await Future.delayed(Duration(milliseconds: 500)); // 缩短延迟，避免新实例提前创建
+      await SwitchableGlobalPlayer().dispose();
     } catch (e) {
       log(e.toString(), name: 'disPoserPlayer');
+    } finally {
+      completer.complete();
+      _disposePlayerFuture = null;
     }
   }
 
@@ -429,7 +475,7 @@ class LivePlayController extends StateController {
     currentPlayRoom.value = nextChannel;
     isNextOrPrev = 1;
     channelTimer?.cancel();
-    channelTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    channelTimer = Timer(const Duration(seconds: 1), () {
       lastChannelIndex.value = currentChannelIndex.value;
       EmojiManager().preload(Sites.of(nextChannel.platform!).id);
       resetRoom(Sites.of(nextChannel.platform!), nextChannel.roomId!);
@@ -457,7 +503,7 @@ class LivePlayController extends StateController {
     currentPlayRoom.value = nextChannel;
     isNextOrPrev = 0;
     channelTimer?.cancel();
-    channelTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    channelTimer = Timer(const Duration(seconds: 1), () {
       lastChannelIndex.value = currentChannelIndex.value;
       EmojiManager().preload(Sites.of(nextChannel.platform!).id);
       resetRoom(Sites.of(nextChannel.platform!), nextChannel.roomId!);
@@ -479,20 +525,19 @@ class LivePlayController extends StateController {
     isNextOrPrev = 0;
     isFirstLoad.value = true;
     channelTimer?.cancel();
-    channelTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    channelTimer = Timer(const Duration(seconds: 1), () {
       lastChannelIndex.value = currentChannelIndex.value;
       EmojiManager().preload(Sites.of(nextChannel.platform!).id);
       resetRoom(Sites.of(nextChannel.platform!), nextChannel.roomId!);
     });
   }
 
-  void resetRoom(Site site, String roomId) async {
-    disPoserPlayer();
-    Timer(const Duration(milliseconds: 200), () {
-      if (lastChannelIndex.value == currentChannelIndex.value) {
-        resetPlayerState();
-      }
-    });
+  Future<void> resetRoom(Site site, String roomId) async {
+    await disPoserPlayer();
+    await Future.delayed(const Duration(milliseconds: 200));
+    if (lastChannelIndex.value == currentChannelIndex.value) {
+      await resetPlayerState();
+    }
   }
 
   void onKeyEvent(KeyEvent key) {

@@ -33,9 +33,20 @@ class MediaKitPlayerAdapter implements UnifiedPlayer {
   StreamSubscription<int?>? _widthSub; // ✅ int?
   StreamSubscription<int?>? _heightSub; // ✅ int?
 
+  static bool _mediaKitInitialized = false;
+
+  static void _ensureMediaKitInitialized() {
+    if (!_mediaKitInitialized) {
+      MediaKit.ensureInitialized();
+      _mediaKitInitialized = true;
+    }
+  }
+
   @override
   Future<void> init() async {
     if (_disposed) return;
+
+    _ensureMediaKitInitialized();
 
     _isPlaying = false;
     isInitialized = false;
@@ -56,6 +67,16 @@ class MediaKitPlayerAdapter implements UnifiedPlayer {
       await native.setProperty('network-timeout', '30'); // 给 mpv 30秒的总容忍时间
       await native.setProperty('demuxer-lavf-probsize', '1048576'); // 减半探测大小
       await native.setProperty('demuxer-lavf-analyzeduration', '3'); // 减少解析时间
+      await native.setProperty('demuxer-max-bytes', '15MiB');
+      await native.setProperty('demuxer-max-back-bytes', '0');
+      await native.setProperty('cache', 'no');
+      await native.setProperty('cache-secs', '10');
+      await native.setProperty('demuxer-readahead-secs', '5');
+      await native.setProperty('framedrop', 'vo');
+      await native.setProperty('video-latency-hacks', 'yes');
+      if (Platform.isAndroid && !settings.customPlayerOutput.value) {
+        await native.setProperty('ao', 'audiotrack');
+      }
     }
     if (settings.customPlayerOutput.value) {
       if (_player.platform is NativePlayer) {
@@ -138,8 +159,7 @@ class MediaKitPlayerAdapter implements UnifiedPlayer {
   Future<void> setDataSource(String url, List<String> playUrls, Map<String, String> headers) async {
     if (_disposed) return;
     await _player.stop();
-    Playlist playlist = Playlist(playUrls.map((playUrl) => Media(playUrl, httpHeaders: headers)).toList());
-    await _player.open(playlist);
+    await _player.open(Media(url, httpHeaders: headers));
   }
 
   @override
@@ -157,7 +177,6 @@ class MediaKitPlayerAdapter implements UnifiedPlayer {
   @override
   Widget getVideoWidget(int index, Widget? controls) {
     return Video(
-      key: UniqueKey(),
       controller: _controller,
       pauseUponEnteringBackgroundMode: !settings.enableBackgroundPlay.value,
       resumeUponEnteringForegroundMode: !settings.enableBackgroundPlay.value,
@@ -221,7 +240,7 @@ class MediaKitPlayerAdapter implements UnifiedPlayer {
   Future<void> setVolume(double value) async {
     if (_disposed) return;
     final vol = (value * 100).clamp(0.0, 100.0);
-    await _player.setVolume(vol * 2); // 乘以3是因为我们在设置中将最大音量设置为300
+    await _player.setVolume(vol * 2); // 额外放大一倍，补偿 mpv 在部分设备上的偏小音量
   }
 
   @override
@@ -231,6 +250,11 @@ class MediaKitPlayerAdapter implements UnifiedPlayer {
 
   @override
   Future<void> release() async {
+    if (!_disposed) {
+      try {
+        await _player.stop();
+      } catch (_) {}
+    }
     dispose();
   }
 }

@@ -75,12 +75,21 @@ class HomeController extends BasePageController {
     Get.toNamed(RoutePath.kSync);
   }
 
+  Timer? _clockTimer;
+
   void initTimer() {
-    Timer.periodic(const Duration(seconds: 1), (Timer timer) {
+    _clockTimer = Timer.periodic(const Duration(seconds: 1), (Timer timer) {
       DateTime now = DateTime.now();
       DateFormat formatter = DateFormat('yyyy年MM月dd日 HH:mm:ss', 'zh_CN');
       datetime.value = formatter.format(now);
     });
+  }
+
+  @override
+  void onClose() {
+    _clockTimer?.cancel();
+    _clockTimer = null;
+    super.onClose();
   }
 
   @override

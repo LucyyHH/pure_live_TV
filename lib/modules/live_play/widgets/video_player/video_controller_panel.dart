@@ -38,20 +38,31 @@ class _VideoControllerPanelState extends State<VideoControllerPanel> {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      type: MaterialType.transparency,
-      child: Stack(
-        children: [
-          ChannelVideoWidget(controller: controller, barHeight: 100),
-          DanmakuViewer(controller: controller),
-          SettingsPanel(controller: controller),
-          ResolutionPanel(controller: controller),
-          LinePanel(controller: controller),
-          FavoriteChoose(controller: controller),
-          TopActionBar(controller: controller, barHeight: barHeight),
-          BottomActionBar(controller: controller, barHeight: barHeight),
-        ],
-      ),
+    return Stack(
+      children: [
+        Obx(() => controller.showChangeNameFlag.value
+            ? ChannelVideoWidget(controller: controller, barHeight: 100)
+            : const SizedBox.shrink()),
+        DanmakuViewer(controller: controller),
+        Obx(() => controller.showSettting.value
+            ? SettingsPanel(controller: controller)
+            : const SizedBox.shrink()),
+        Obx(() => controller.showQualityPanel.value
+            ? ResolutionPanel(controller: controller)
+            : const SizedBox.shrink()),
+        Obx(() => controller.showLinePanel.value
+            ? LinePanel(controller: controller)
+            : const SizedBox.shrink()),
+        Obx(() => controller.showPlayListPanel.value
+            ? FavoriteChoose(controller: controller)
+            : const SizedBox.shrink()),
+        Obx(() => controller.showController.value
+            ? TopActionBar(controller: controller, barHeight: barHeight)
+            : const SizedBox.shrink()),
+        Obx(() => controller.showController.value
+            ? BottomActionBar(controller: controller, barHeight: barHeight)
+            : const SizedBox.shrink()),
+      ],
     );
   }
 }
@@ -91,33 +102,30 @@ class TopActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(
-      () => AnimatedPositioned(
-        top: (controller.showController.value) ? 0 : -barHeight,
-        left: 0,
-        right: 0,
+    return Positioned(
+      top: 0,
+      left: 0,
+      right: 0,
+      height: barHeight,
+      child: Container(
         height: barHeight,
-        duration: const Duration(milliseconds: 300),
-        child: Container(
-          height: barHeight,
-          alignment: Alignment.centerLeft,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          decoration: const BoxDecoration(color: Colors.black),
-          child: Row(
-            children: [
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Text(
-                    controller.room.title ?? '正在读取直播信息...',
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white, fontSize: 20, decoration: TextDecoration.none),
-                  ),
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        decoration: const BoxDecoration(color: Colors.black),
+        child: Row(
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Text(
+                  controller.room.title ?? '正在读取直播信息...',
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: Colors.white, fontSize: 20, decoration: TextDecoration.none),
                 ),
               ),
-              ...[const DatetimeInfo()],
-            ],
-          ),
+            ),
+            const DatetimeInfo(),
+          ],
         ),
       ),
     );
@@ -201,31 +209,28 @@ class BottomActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(
-      () => AnimatedPositioned(
-        bottom: (controller.showController.value) ? 0 : -barHeight,
-        left: 0,
-        right: 0,
+    return Positioned(
+      bottom: 0,
+      left: 0,
+      right: 0,
+      height: barHeight,
+      child: Container(
         height: barHeight,
-        duration: const Duration(milliseconds: 300),
-        child: Container(
-          height: barHeight,
-          alignment: Alignment.centerLeft,
-          padding: const EdgeInsets.symmetric(horizontal: 8),
-          decoration: const BoxDecoration(color: Colors.black),
-          child: Row(
-            children: <Widget>[
-              FavoriteButton(controller: controller),
-              RefreshButton(controller: controller),
-              PlayPauseButton(controller: controller),
-              DanmakuButton(controller: controller),
-              SettingsButton(controller: controller),
-              QualiteNameButton(controller: controller),
-              LineButton(controller: controller),
-              BoxFitButton(controller: controller),
-              const Spacer(),
-            ],
-          ),
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        decoration: const BoxDecoration(color: Colors.black),
+        child: Row(
+          children: <Widget>[
+            FavoriteButton(controller: controller),
+            RefreshButton(controller: controller),
+            PlayPauseButton(controller: controller),
+            DanmakuButton(controller: controller),
+            SettingsButton(controller: controller),
+            QualiteNameButton(controller: controller),
+            LineButton(controller: controller),
+            BoxFitButton(controller: controller),
+            const Spacer(),
+          ],
         ),
       ),
     );
@@ -245,7 +250,7 @@ class PlayPauseButton extends StatelessWidget {
       child: Obx(
         () => HighlightIconButton(
           useFocus: false,
-          focusNode: AppFocusNode(),
+          focusNode: controller.focusNode,
           selected: controller.currentBottomClickType.value == BottomButtonClickType.playPause,
           iconData: controller.globalPlayer.isPlaying.value ? Icons.pause_rounded : Icons.play_arrow_rounded,
           onTap: () {
@@ -270,11 +275,10 @@ class LineButton extends StatelessWidget {
       child: Obx(
         () => HighlightButton(
           useFocus: false,
-          focusNode: AppFocusNode(),
+          focusNode: controller.focusNode,
           selected: controller.currentBottomClickType.value == BottomButtonClickType.changeLine,
           iconData: Icons.density_small_rounded,
           onTap: () {
-            // 点击弹出线路面板
             controller.showLinePanel.value = true;
           },
           text: '线路${controller.currentLineIndex + 1}',
@@ -297,7 +301,7 @@ class QualiteNameButton extends StatelessWidget {
       child: Obx(
         () => HighlightButton(
           useFocus: false,
-          focusNode: AppFocusNode(),
+          focusNode: controller.focusNode,
           selected: controller.currentBottomClickType.value == BottomButtonClickType.qualityName,
           iconData: Icons.swap_vertical_circle_outlined,
           onTap: () {
@@ -324,7 +328,7 @@ class BoxFitButton extends StatelessWidget {
       child: Obx(
         () => HighlightButton(
           useFocus: false,
-          focusNode: AppFocusNode(),
+          focusNode: controller.focusNode,
           selected: controller.currentBottomClickType.value == BottomButtonClickType.boxFit,
           iconData: Icons.video_settings_outlined,
           onTap: () {
@@ -341,6 +345,7 @@ class RefreshButton extends StatelessWidget {
   const RefreshButton({super.key, required this.controller});
 
   final VideoController controller;
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -349,7 +354,7 @@ class RefreshButton extends StatelessWidget {
       child: Obx(
         () => HighlightIconButton(
           useFocus: false,
-          focusNode: AppFocusNode(),
+          focusNode: controller.focusNode,
           selected: controller.currentBottomClickType.value == BottomButtonClickType.refresh,
           iconData: Icons.refresh_rounded,
           onTap: () {
@@ -374,7 +379,7 @@ class DanmakuButton extends StatelessWidget {
       child: Obx(
         () => HighlightIconButton(
           useFocus: false,
-          focusNode: AppFocusNode(),
+          focusNode: controller.focusNode,
           selected: controller.currentBottomClickType.value == BottomButtonClickType.danmaku,
           icon: controller.hideDanmaku.value
               ? SvgPicture.asset(
@@ -406,6 +411,7 @@ class SettingsButton extends StatelessWidget {
   const SettingsButton({super.key, required this.controller});
 
   final VideoController controller;
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -414,7 +420,7 @@ class SettingsButton extends StatelessWidget {
       child: Obx(
         () => HighlightIconButton(
           useFocus: false,
-          focusNode: AppFocusNode(),
+          focusNode: controller.focusNode,
           selected: controller.currentBottomClickType.value == BottomButtonClickType.settings,
           icon: SvgPicture.asset(
             'assets/images/video/danmu_setting.svg',
@@ -446,7 +452,7 @@ class FavoriteButton extends StatelessWidget {
         () => HighlightButton(
           useFocus: false,
           text: !controller.settings.isFavorite(controller.room) ? '未关注' : "已关注",
-          focusNode: AppFocusNode(),
+          focusNode: controller.focusNode,
           selected: controller.currentBottomClickType.value == BottomButtonClickType.favorite,
           iconData: !controller.settings.isFavorite(controller.room)
               ? Icons.highlight_remove_outlined
@@ -473,17 +479,14 @@ class SettingsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(
-      () => AnimatedPositioned(
-        top: 0,
-        bottom: 0,
-        right: controller.showSettting.value ? 0 : -width,
-        width: width,
-        duration: const Duration(milliseconds: 200),
-        child: Container(
-          padding: AppStyle.edgeInsetsA12,
-          child: DanmakuSetting(controller: controller),
-        ),
+    return Positioned(
+      top: 0,
+      bottom: 0,
+      right: 0,
+      width: width,
+      child: Container(
+        padding: AppStyle.edgeInsetsA12,
+        child: DanmakuSetting(controller: controller),
       ),
     );
   }
@@ -521,7 +524,7 @@ class DanmakuSetting extends StatelessWidget {
                 Obx(
                   () => SettingsItemWidget(
                     useFocus: false,
-                    focusNode: AppFocusNode(),
+                    focusNode: controller.focusNode,
                     key: VideoController.danmakuAbleKey,
                     selected: controller.currentDanmakuClickType.value == DanmakuSettingClickType.danmakuAble,
                     title: "弹幕开关",
@@ -536,7 +539,7 @@ class DanmakuSetting extends StatelessWidget {
                 Obx(
                   () => SettingsItemWidget(
                     useFocus: false,
-                    focusNode: AppFocusNode(),
+                    focusNode: controller.focusNode,
                     selected: controller.currentDanmakuClickType.value == DanmakuSettingClickType.danmakuSize,
                     title: "弹幕大小",
                     // 使用常量类定义
@@ -551,7 +554,7 @@ class DanmakuSetting extends StatelessWidget {
                 Obx(
                   () => SettingsItemWidget(
                     useFocus: false,
-                    focusNode: AppFocusNode(),
+                    focusNode: controller.focusNode,
                     selected: controller.currentDanmakuClickType.value == DanmakuSettingClickType.danmakuSpeed,
                     title: "弹幕速度",
                     // 使用常量类定义
@@ -566,7 +569,7 @@ class DanmakuSetting extends StatelessWidget {
                 Obx(
                   () => SettingsItemWidget(
                     useFocus: false,
-                    focusNode: AppFocusNode(),
+                    focusNode: controller.focusNode,
                     selected: controller.currentDanmakuClickType.value == DanmakuSettingClickType.danmakuArea,
                     title: "显示区域",
                     // 使用常量类定义
@@ -581,7 +584,7 @@ class DanmakuSetting extends StatelessWidget {
                 Obx(
                   () => SettingsItemWidget(
                     useFocus: false,
-                    focusNode: AppFocusNode(),
+                    focusNode: controller.focusNode,
                     selected: controller.currentDanmakuClickType.value == DanmakuSettingClickType.danmakuTopArea,
                     title: "距离顶部",
                     // 使用常量类定义
@@ -596,7 +599,7 @@ class DanmakuSetting extends StatelessWidget {
                 Obx(
                   () => SettingsItemWidget(
                     useFocus: false,
-                    focusNode: AppFocusNode(),
+                    focusNode: controller.focusNode,
                     selected: controller.currentDanmakuClickType.value == DanmakuSettingClickType.danmakuBottomArea,
                     title: "距离底部",
                     // 使用常量类定义
@@ -611,7 +614,7 @@ class DanmakuSetting extends StatelessWidget {
                 Obx(
                   () => SettingsItemWidget(
                     useFocus: false,
-                    focusNode: AppFocusNode(),
+                    focusNode: controller.focusNode,
                     selected: controller.currentDanmakuClickType.value == DanmakuSettingClickType.danmakuOpacity,
                     title: "不透明度",
                     // 使用常量类定义
@@ -626,7 +629,7 @@ class DanmakuSetting extends StatelessWidget {
                 Obx(
                   () => SettingsItemWidget(
                     useFocus: false,
-                    focusNode: AppFocusNode(),
+                    focusNode: controller.focusNode,
                     selected: controller.currentDanmakuClickType.value == DanmakuSettingClickType.danmakuStorke,
                     title: "描边宽度",
                     // 使用常量类定义
@@ -655,17 +658,14 @@ class ResolutionPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(
-      () => AnimatedPositioned(
-        top: 0,
-        bottom: 0,
-        right: controller.showQualityPanel.value ? 0 : -width,
-        width: width,
-        duration: const Duration(milliseconds: 200),
-        child: Container(
-          padding: AppStyle.edgeInsetsA12,
-          child: ResolutionSetting(controller: controller),
-        ),
+    return Positioned(
+      top: 0,
+      bottom: 0,
+      right: 0,
+      width: width,
+      child: Container(
+        padding: AppStyle.edgeInsetsA12,
+        child: ResolutionSetting(controller: controller),
       ),
     );
   }
@@ -704,7 +704,7 @@ class ResolutionSetting extends StatelessWidget {
                     padding: AppStyle.edgeInsetsA24,
                     child: HighlightButton(
                       text: quality.quality,
-                      focusNode: AppFocusNode(),
+                      focusNode: controller.focusNode,
                       selected: controller.qualityCurrentIndex.value == e.key,
                     ),
                   );
@@ -727,17 +727,14 @@ class LinePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(
-      () => AnimatedPositioned(
-        top: 0,
-        bottom: 0,
-        right: controller.showLinePanel.value ? 0 : -width,
-        width: width,
-        duration: const Duration(milliseconds: 200),
-        child: Container(
-          padding: AppStyle.edgeInsetsA12,
-          child: LineSetting(controller: controller),
-        ),
+    return Positioned(
+      top: 0,
+      bottom: 0,
+      right: 0,
+      width: width,
+      child: Container(
+        padding: AppStyle.edgeInsetsA12,
+        child: LineSetting(controller: controller),
       ),
     );
   }
@@ -777,7 +774,7 @@ class LineSetting extends StatelessWidget {
                     padding: AppStyle.edgeInsetsA24,
                     child: HighlightButton(
                       text: "线路${index + 1}",
-                      focusNode: AppFocusNode(),
+                      focusNode: controller.focusNode,
                       selected: controller.lineCurrentIndex.value == index,
                     ),
                   );
@@ -800,12 +797,11 @@ class ChannelVideoWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Obx(() {
       LiveRoom room = controller.settings.currentPlayList[controller.settings.currentPlayListNodeIndex.value];
-      return AnimatedPositioned(
-        top: controller.showChangeNameFlag.value ? 0 : -barHeight,
+      return Positioned(
+        top: 0,
         left: 0,
         right: 0,
         height: barHeight,
-        duration: const Duration(milliseconds: 100),
         child: Container(
           height: barHeight,
           alignment: Alignment.centerLeft,
@@ -840,17 +836,14 @@ class FavoriteChoose extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Obx(
-      () => AnimatedPositioned(
-        top: 0,
-        bottom: 0,
-        right: controller.showPlayListPanel.value ? 0 : -width,
-        width: width,
-        duration: const Duration(milliseconds: 200),
-        child: Container(
-          padding: AppStyle.edgeInsetsA12,
-          child: FavoriteChoosePanel(controller: controller),
-        ),
+    return Positioned(
+      top: 0,
+      bottom: 0,
+      right: 0,
+      width: width,
+      child: Container(
+        padding: AppStyle.edgeInsetsA12,
+        child: FavoriteChoosePanel(controller: controller),
       ),
     );
   }
@@ -896,7 +889,7 @@ class FavoriteChoosePanel extends StatelessWidget {
                         text: !controller.settings.isFavorite(controller.settings.currentPlayList[index])
                             ? '未关注'
                             : "已关注",
-                        focusNode: AppFocusNode(),
+                        focusNode: controller.focusNode,
                         selected: controller.beforePlayNodeIndex.value == index,
                         iconData: !controller.settings.isFavorite(controller.settings.currentPlayList[index])
                             ? Icons.highlight_remove_outlined
@@ -921,7 +914,7 @@ class FavoriteChoosePanel extends StatelessWidget {
                         ),
                       ),
                       subtitle: controller.settings.currentPlayList[index].nick,
-                      focusNode: AppFocusNode(),
+                      focusNode: controller.focusNode,
                       useFocus: false,
                       selected: controller.beforePlayNodeIndex.value == index,
                       onTap: () {

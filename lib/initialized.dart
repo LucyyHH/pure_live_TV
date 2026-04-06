@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'package:get/get.dart';
+import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
-import 'package:media_kit/media_kit.dart';
 import 'common/utils/hive_pref_util.dart';
 import 'package:pure_live/common/index.dart';
 import 'package:hive_ce_flutter/hive_flutter.dart';
@@ -25,6 +25,11 @@ class AppInitializer {
   Future<void> initialize() async {
     if (_isInitialized) return;
     WidgetsFlutterBinding.ensureInitialized();
+
+    final cache = PaintingBinding.instance.imageCache;
+    cache.maximumSize = 50;
+    cache.maximumSizeBytes = 30 * 1024 * 1024;
+
     // 强制横屏
     SystemChrome.setPreferredOrientations([DeviceOrientation.landscapeRight, DeviceOrientation.landscapeLeft]);
     // 全屏
@@ -35,7 +40,6 @@ class AppInitializer {
     String path = '${appDir.path}${Platform.pathSeparator}pure_live_Tv';
     await Hive.initFlutter(path);
     await HivePrefUtil.init();
-    MediaKit.ensureInitialized();
     initService();
     _isInitialized = true;
   }

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer' as dev;
 import 'package:rxdart/rxdart.dart';
 import 'unified_player_interface.dart';
@@ -19,6 +20,7 @@ class VideoPlayerAdapter implements UnifiedPlayer {
 
   bool _isPlaying = false;
   bool _disposed = false;
+  Future<void>? _releaseFuture;
 
   @override
   Future<void> init() async {
@@ -49,7 +51,9 @@ class VideoPlayerAdapter implements UnifiedPlayer {
     }
 
     // 4. 加载状态 (Buffering)
-    _loadingSubject.add(state.isBuffering);
+    if (_loadingSubject.value != state.isBuffering) {
+      _loadingSubject.add(state.isBuffering);
+    }
 
     // 5. 更新视频尺寸 (用于触发 UI 刷新)
     final w = state.size.width.toInt();
@@ -75,7 +79,7 @@ class VideoPlayerAdapter implements UnifiedPlayer {
       _player = VideoPlayerController.networkUrl(
         Uri.parse(url),
         httpHeaders: headers,
-        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: false),
       );
 
       _player!.addListener(_playerListener);
@@ -98,26 +102,15 @@ class VideoPlayerAdapter implements UnifiedPlayer {
 
   @override
   Widget getVideoWidget(int index, Widget? controls) {
-    final boxFit = PlayerConsts.videofitList[index];
-
-    return Container(
+    return ColoredBox(
       color: Colors.black,
-      width: double.infinity,
-      height: double.infinity,
-      child: Stack(
-        children: [
-          Positioned.fill(
-            child: FittedBox(
-              fit: boxFit,
-              clipBehavior: Clip.hardEdge,
-              child: SizedBox(
-                width: _player!.value.size.width,
-                height: _player!.value.size.height,
-                child: VideoPlayer(_player!),
-              ),
-            ),
-          ),
-        ],
+      child: Center(
+        child: AspectRatio(
+          aspectRatio: (_player!.value.size.width > 0 && _player!.value.size.height > 0)
+              ? _player!.value.size.width / _player!.value.size.height
+              : 16 / 9,
+          child: VideoPlayer(_player!),
+        ),
       ),
     );
   }
@@ -145,7 +138,7 @@ class VideoPlayerAdapter implements UnifiedPlayer {
     _disposed = true;
 
     _player?.removeListener(_playerListener);
-    _player?.dispose();
+    _player = null;
 
     _playingSubject.close();
     _errorSubject.close();
@@ -157,7 +150,28 @@ class VideoPlayerAdapter implements UnifiedPlayer {
 
   @override
   Future<void> release() async {
-    dispose();
+    if (_releaseFuture != null) {
+      return _releaseFuture!;
+    }
+
+    final completer = Completer<void>();
+    _releaseFuture = completer.future;
+
+    final player = _player;
+    _player = null;
+
+    try {
+      if (player != null) {
+        player.removeListener(_playerListener);
+        await player.pause();
+        await player.dispose();
+      }
+    } catch (_) {
+    } finally {
+      dispose();
+      completer.complete();
+      _releaseFuture = null;
+    }
   }
 
   // UnifiedPlayer 接口实现

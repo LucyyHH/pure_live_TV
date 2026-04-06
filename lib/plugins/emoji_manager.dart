@@ -33,8 +33,12 @@ class EmojiManager {
         try {
           final bytes = await rootBundle.load(path);
           final codec = await ui.instantiateImageCodec(bytes.buffer.asUint8List());
-          final frameInfo = await codec.getNextFrame();
-          _cache[key] = frameInfo.image;
+          try {
+            final frameInfo = await codec.getNextFrame();
+            _cache[key] = frameInfo.image;
+          } finally {
+            codec.dispose();
+          }
         } catch (e) {
           debugPrint("Failed to load emoji $key: $e");
         }
@@ -43,6 +47,9 @@ class EmojiManager {
   }
 
   void clearCache() {
+    for (final image in _cache.values) {
+      image.dispose();
+    }
     _cache.clear();
     _validEmojiPaths.clear();
   }
@@ -87,14 +94,19 @@ class EmojiManager {
 
   static Future<void> loadEmoji(String emojiText, String assetPath) async {
     final image = await loadImageFromAsset(assetPath);
+    _cache[emojiText]?.dispose();
     _cache[emojiText] = image;
   }
 
   static Future<ui.Image> loadImageFromAsset(String assetPath) async {
     final data = await rootBundle.load(assetPath);
     final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
-    final frame = await codec.getNextFrame();
-    return frame.image;
+    try {
+      final frame = await codec.getNextFrame();
+      return frame.image;
+    } finally {
+      codec.dispose();
+    }
   }
 
   static ui.Image? getEmoji(String emojiText) {

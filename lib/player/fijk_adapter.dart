@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:get/get.dart';
 import 'dart:developer' as dev;
 import 'package:rxdart/rxdart.dart';
@@ -20,6 +21,7 @@ class FijkPlayerAdapter implements UnifiedPlayer {
   bool _isPlaying = false;
   bool isInitialized = false;
   bool _disposed = false;
+  Future<void>? _releaseFuture;
 
   @override
   Future<void> init() async {
@@ -182,6 +184,34 @@ class FijkPlayerAdapter implements UnifiedPlayer {
 
   @override
   Future<void> release() async {
-    dispose(); // delegate to dispose to avoid double-release
+    if (_releaseFuture != null) {
+      return _releaseFuture!;
+    }
+
+    final completer = Completer<void>();
+    _releaseFuture = completer.future;
+
+    try {
+      if (!_disposed) {
+        _disposed = true;
+        _player.removeListener(_playerListener);
+        try {
+          await _player.stop();
+        } catch (_) {}
+        try {
+          await _player.release();
+        } catch (_) {}
+
+        _playingSubject.close();
+        _errorSubject.close();
+        _loadingSubject.close();
+        _widthSubject.close();
+        _heightSubject.close();
+        _completeSubject.close();
+      }
+    } finally {
+      completer.complete();
+      _releaseFuture = null;
+    }
   }
 }

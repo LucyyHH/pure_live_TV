@@ -91,6 +91,10 @@ dependencies:
   hive_ce_flutter: ^2.3.3
   google_fonts: ^8.0.0
   pool: ^1.5.2
+dependency_overrides:
+  video_player_android:
+    path: packages/video_player_android
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
