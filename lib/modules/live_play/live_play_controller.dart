@@ -1,14 +1,17 @@
 import 'dart:async';
 import 'dart:developer';
+import 'dart:io';
 import 'package:get/get.dart';
 import 'package:flutter/services.dart';
 import 'package:pure_live/common/index.dart';
 import 'package:pure_live/app/app_focus_node.dart';
+import 'package:pure_live/common/consts/app_consts.dart';
 import 'package:pure_live/core/site/huya_site.dart';
 import 'package:pure_live/plugins/emoji_manager.dart';
 import 'package:pure_live/model/live_play_quality.dart';
 import 'package:pure_live/core/interface/live_danmaku.dart';
 import 'package:pure_live/modules/live_play/load_type.dart';
+import 'package:pure_live/modules/live_play/native_live_bridge.dart';
 import 'package:pure_live/modules/live_play/widgets/index.dart';
 import 'package:pure_live/modules/live_play/widgets/video_player/controller/video_danmaku.dart';
 
@@ -78,10 +81,29 @@ class LivePlayController extends StateController {
   var isLastLine = false.obs;
 
   var isFirstLoad = true.obs;
+  Future<void>? _disposePlayerFuture;
+  bool _nativeLiveStarted = false;
+  Map<String, String> _lastNativeHeaders = const {};
+  StreamSubscription<String>? _themeColorSubscription;
+
+  bool get useNativePlayer =>
+      Platform.isAndroid && settings.enableAndroidNativePlayer.value;
 
   @override
   void onClose() {
-    disPoserPlayer();
+    doubleClickTimer?.cancel();
+    doubleClickTimer = null;
+    channelTimer?.cancel();
+    channelTimer = null;
+    _themeColorSubscription?.cancel();
+    _themeColorSubscription = null;
+    _nativeLiveStarted = false;
+    if (useNativePlayer) {
+      unawaited(NativeLiveBridge.instance.close());
+      NativeLiveBridge.instance.unbindHandler();
+    }
+    unawaited(disPoserPlayer());
+    focusNode.dispose();
     super.onClose();
   }
 
@@ -127,6 +149,12 @@ class LivePlayController extends StateController {
 
   @override
   void onInit() {
+    if (useNativePlayer) {
+      NativeLiveBridge.instance.bindHandler(_handleNativeMethodCall);
+      _themeColorSubscription = settings.themeColorSwitch.listen((_) {
+        unawaited(_syncNativeUi());
+      });
+    }
     currentPlayRoom.value = room;
     onInitPlayerState(
       reloadDataType: detail.value!.platform == Sites.bilibiliSite
@@ -188,7 +216,9 @@ class LivePlayController extends StateController {
 
   void resetGlobalListState() {
     var index = settings.currentPlayList.indexWhere(
-      (element) => element.roomId == currentPlayRoom.value.roomId && element.platform == currentPlayRoom.value.platform,
+      (element) =>
+          element.roomId == currentPlayRoom.value.roomId &&
+          element.platform == currentPlayRoom.value.platform,
     );
     currentChannelIndex.value = index > -1 ? index : 0;
     settings.currentPlayListNodeIndex.value = currentChannelIndex.value;
@@ -204,13 +234,20 @@ class LivePlayController extends StateController {
     currentSite = Sites.of(currentPlayRoom.value.platform!);
     liveDanmaku = currentSite.liveSite.getDanmaku();
     channelTimer?.cancel();
-    handleCurrentLineAndQuality(reloadDataType: reloadDataType, line: line, isReCalculate: isReCalculate);
+    handleCurrentLineAndQuality(
+      reloadDataType: reloadDataType,
+      line: line,
+      isReCalculate: isReCalculate,
+    );
     var liveRoom = await currentSite.liveSite.getRoomDetail(
       roomId: currentPlayRoom.value.roomId!,
       platform: currentPlayRoom.value.platform!,
     );
     if (currentSite.id == Sites.iptvSite) {
-      liveRoom = liveRoom.copyWith(title: currentPlayRoom.value.title!, nick: currentPlayRoom.value.nick!);
+      liveRoom = liveRoom.copyWith(
+        title: currentPlayRoom.value.title!,
+        nick: currentPlayRoom.value.nick!,
+      );
     }
     detail.value = liveRoom;
     resetGlobalListState();
@@ -253,24 +290,33 @@ class LivePlayController extends StateController {
   }
 
   Future<void> disPoserPlayer() async {
+    if (_disposePlayerFuture != null) {
+      return _disposePlayerFuture!;
+    }
+    final completer = Completer<void>();
+    _disposePlayerFuture = completer.future;
+
     try {
       // 优先停止弹幕，避免新实例创建前旧实例仍在运行
-      liveDanmaku.stop();
+      await liveDanmaku.stop();
       liveDanmaku.onMessage = null; // 清空回调，防止内存泄漏
       liveDanmaku.onClose = null;
       liveDanmaku.onReady = null;
 
-      if (videoController != null) {
-        videoController?.dispose();
-        videoController = null;
+      final controller = videoController;
+      videoController = null;
+      if (controller != null) {
+        await controller.destroy();
       }
       success.value = false;
       isFirstLoad.value = true;
       focusNode.requestFocus();
       GlobalPlayerService.instance.playerManager.close();
-      await Future.delayed(Duration(milliseconds: 500)); // 缩短延迟，避免新实例提前创建
     } catch (e) {
       log(e.toString(), name: 'disPoserPlayer');
+    } finally {
+      completer.complete();
+      _disposePlayerFuture = null;
     }
   }
 
@@ -295,9 +341,13 @@ class LivePlayController extends StateController {
     // 移除系统消息添加逻辑（原messages相关）
     liveDanmaku.onMessage = (msg) {
       if (msg.type == LiveMessageType.chat) {
-        if (settings.shieldList.every((element) => !msg.message.contains(element))) {
+        if (settings.shieldList.every(
+          (element) => !msg.message.contains(element),
+        )) {
           // 保留弹幕发送到播放器的核心功能，移除messages添加
-          if (videoController != null) {
+          if (useNativePlayer) {
+            unawaited(NativeLiveBridge.instance.sendDanmaku(msg));
+          } else if (videoController != null) {
             videoController?.sendDanmakuMessage(msg);
           }
         }
@@ -310,7 +360,9 @@ class LivePlayController extends StateController {
   /// 初始化播放器
   void getPlayQualites() async {
     try {
-      var playQualites = await currentSite.liveSite.getPlayQualites(detail: detail.value!);
+      var playQualites = await currentSite.liveSite.getPlayQualites(
+        detail: detail.value!,
+      );
       if (playQualites.isEmpty) {
         ToastUtil.show("无法读取视频信息,请按确定键重新获取");
         success.value = false;
@@ -320,7 +372,9 @@ class LivePlayController extends StateController {
       // 第一次加载 使用系统默认线路
       if (isFirstLoad.value) {
         String userPrefer = settings.preferResolution.value;
-        List<String> availableQualities = playQualites.map((e) => e.quality).toList();
+        List<String> availableQualities = playQualites
+            .map((e) => e.quality)
+            .toList();
         int matchedIndex = availableQualities.indexOf(userPrefer);
         // 尝试直接匹配用户偏好的分辨率
         if (matchedIndex != -1) {
@@ -333,7 +387,8 @@ class LivePlayController extends StateController {
         List<String> systemResolutions = settings.resolutionsList;
         int preferLevel = systemResolutions.indexOf(userPrefer);
         double preferRatio = preferLevel / (systemResolutions.length - 1);
-        int targetIndex = (preferRatio * (availableQualities.length - 1)).round();
+        int targetIndex = (preferRatio * (availableQualities.length - 1))
+            .round();
         // 确保索引在有效范围内
         targetIndex = targetIndex.clamp(0, availableQualities.length - 1);
         currentQuality.value = targetIndex;
@@ -380,7 +435,8 @@ class LivePlayController extends StateController {
         "cache-control": "no-cache",
         "dnt": "1",
         "pragma": "no-cache",
-        "sec-ch-ua": '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+        "sec-ch-ua":
+            '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
         "sec-ch-ua-mobile": "?0",
         "sec-ch-ua-platform": '"macOS"',
         "sec-fetch-dest": "document",
@@ -394,7 +450,16 @@ class LivePlayController extends StateController {
       };
     } else if (currentSite.id == 'huya') {
       var ua = await HuyaSite().getHuYaUA();
-      headers = {"user-agent": ua, "origin": "https://www.huya.com", "cookie": settings.huyaCookie.value};
+      headers = {
+        "user-agent": ua,
+        "origin": "https://www.huya.com",
+        "cookie": settings.huyaCookie.value,
+      };
+    }
+    if (useNativePlayer) {
+      await _setNativePlayer(headers);
+      success.value = true;
+      return;
     }
     videoController = VideoController(
       playerKey: playerKey,
@@ -490,7 +555,7 @@ class LivePlayController extends StateController {
   }
 
   void resetRoom(Site site, String roomId) async {
-    disPoserPlayer();
+    await disPoserPlayer();
     Timer(const Duration(milliseconds: 200), () {
       if (lastChannelIndex.value == currentChannelIndex.value) {
         resetPlayerState();
@@ -527,7 +592,10 @@ class LivePlayController extends StateController {
         key.logicalKey == LogicalKeyboardKey.controlRight ||
         key.logicalKey == LogicalKeyboardKey.controlLeft) {
       restoryQualityAndLines();
-      resetRoom(Sites.of(currentPlayRoom.value.platform!), currentPlayRoom.value.roomId!);
+      resetRoom(
+        Sites.of(currentPlayRoom.value.platform!),
+        currentPlayRoom.value.roomId!,
+      );
     }
   }
 
@@ -537,5 +605,290 @@ class LivePlayController extends StateController {
       _currentTimeStamp = now;
       func.call();
     }
+  }
+
+  Future<void> _setNativePlayer(Map<String, String> headers) async {
+    _lastNativeHeaders = Map<String, String>.from(headers);
+    final payload = _buildNativePayload(headers);
+    if (_nativeLiveStarted) {
+      await NativeLiveBridge.instance.update(payload);
+    } else {
+      await NativeLiveBridge.instance.start(payload);
+      _nativeLiveStarted = true;
+    }
+  }
+
+  Map<String, dynamic> _buildNativePayload(Map<String, String> headers) {
+    final safeQualityIndex = currentQuality.value
+        .clamp(0, qualites.isEmpty ? 0 : qualites.length - 1)
+        .toInt();
+    final safeLineIndex = currentLineIndex.value
+        .clamp(0, playUrls.isEmpty ? 0 : playUrls.length - 1)
+        .toInt();
+    final playList = settings.currentPlayList.whereType<LiveRoom>().toList(
+      growable: false,
+    );
+    final currentIndex = settings.currentPlayListNodeIndex.value
+        .clamp(0, playList.isEmpty ? 0 : playList.length - 1)
+        .toInt();
+    final currentRoom = currentPlayRoom.value;
+    final roomDetail = detail.value ?? currentRoom;
+    final roomTitle = roomDetail.title?.isNotEmpty == true
+        ? roomDetail.title!
+        : currentRoom.title ?? '';
+    final roomNick = roomDetail.nick?.isNotEmpty == true
+        ? roomDetail.nick!
+        : currentRoom.nick ?? '';
+
+    return {
+      'url': playUrls.isNotEmpty ? playUrls[safeLineIndex] : '',
+      'headers': headers,
+      'title': roomTitle,
+      'roomTitle': roomTitle,
+      'roomNick': roomNick,
+      'channelName': _buildNativeChannelName(
+        playList: playList,
+        currentIndex: currentIndex,
+        roomNick: roomNick,
+        roomTitle: roomTitle,
+      ),
+      'qualities': qualites.map((e) => e.quality).toList(growable: false),
+      'qualityIndex': safeQualityIndex,
+      'currentQualityName': qualites.isNotEmpty
+          ? qualites[safeQualityIndex].quality
+          : '',
+      'lines': List<String>.generate(
+        playUrls.length,
+        (index) => '线路${index + 1}',
+        growable: false,
+      ),
+      'lineIndex': safeLineIndex,
+      'nativeRenderViewType': settings.nativePlayerViewType.value,
+      'nativePreferSoftwareDecoder':
+          settings.nativePlayerPreferSoftwareDecoder.value,
+      'nativeCompatMode': settings.nativePlayerCompatMode.value,
+      'themeColorValue': _themeColorValue(),
+      'playlist': _buildNativePlaylist(playList),
+      'currentPlaylistIndex': currentIndex,
+      'isFavoriteCurrent': settings.isFavorite(currentRoom),
+      'fitIndex': settings.videoFitIndex.value,
+      'fitLabels': AppConsts.videoFitChineseTranslation,
+      'danmaku': {
+        'hidden': settings.hideDanmaku.value,
+        'fontSize': settings.danmakuFontSize.value,
+        'speed': settings.danmakuSpeed.value,
+        'area': settings.danmakuArea.value,
+        'topDistance': settings.danmakuTopArea.value,
+        'bottomDistance': settings.danmakuBottomArea.value,
+        'opacity': settings.danmakuOpacity.value,
+        'stroke': settings.danmakuFontBorder.value,
+      },
+    };
+  }
+
+  String _buildNativeChannelName({
+    required List<LiveRoom> playList,
+    required int currentIndex,
+    required String roomNick,
+    required String roomTitle,
+  }) {
+    if (playList.isEmpty) {
+      return roomNick.isNotEmpty ? roomNick : roomTitle;
+    }
+    return '${currentIndex + 1}. ${_nativePlaylistDisplayName(playList[currentIndex])}';
+  }
+
+  List<Map<String, dynamic>> _buildNativePlaylist(List<LiveRoom> playList) {
+    return playList
+        .map(
+          (room) => {
+            'title': room.title ?? '',
+            'nick': room.nick ?? '',
+            'platform': room.platform ?? '',
+            'avatar': room.avatar ?? '',
+            'isFavorite': settings.isFavorite(room),
+          },
+        )
+        .toList(growable: false);
+  }
+
+  String _nativePlaylistDisplayName(LiveRoom room) {
+    if (room.platform == Sites.iptvSite) {
+      return room.title ?? '';
+    }
+    return room.nick?.isNotEmpty == true ? room.nick! : room.title ?? '';
+  }
+
+  int _themeColorValue() {
+    var hex = settings.themeColorSwitch.value.replaceAll('#', '');
+    if (hex.length == 6) {
+      hex = 'FF$hex';
+    }
+    final value = int.tryParse(hex, radix: 16) ?? 0xFFDC143C;
+    return _toSigned32(value);
+  }
+
+  int _toSigned32(int value) {
+    final normalized = value & 0xFFFFFFFF;
+    return normalized >= 0x80000000 ? normalized - 0x100000000 : normalized;
+  }
+
+  Future<void> _syncNativeUi() async {
+    if (!useNativePlayer || !_nativeLiveStarted) return;
+    await NativeLiveBridge.instance.syncUi(
+      _buildNativePayload(_lastNativeHeaders),
+    );
+  }
+
+  void _toggleFavoriteRoom(LiveRoom room) {
+    if (settings.isFavorite(room)) {
+      settings.removeRoom(room);
+      ToastUtil.show('已取消关注');
+    } else {
+      settings.addRoom(room);
+      ToastUtil.show('已关注');
+    }
+  }
+
+  Future<void> _applyNativeDanmakuSetting(String key, dynamic value) async {
+    switch (key) {
+      case 'hidden':
+        settings.hideDanmaku.value = value == true;
+        break;
+      case 'fontSize':
+        settings.danmakuFontSize.value = (value as num).toDouble();
+        break;
+      case 'speed':
+        settings.danmakuSpeed.value = (value as num).toDouble();
+        break;
+      case 'area':
+        settings.danmakuArea.value = (value as num).toDouble();
+        break;
+      case 'topDistance':
+        settings.danmakuTopArea.value = (value as num).toDouble();
+        break;
+      case 'bottomDistance':
+        settings.danmakuBottomArea.value = (value as num).toDouble();
+        break;
+      case 'opacity':
+        settings.danmakuOpacity.value = (value as num).toDouble();
+        break;
+      case 'stroke':
+        settings.danmakuFontBorder.value = (value as num).toDouble();
+        break;
+    }
+    await _syncNativeUi();
+  }
+
+  Future<void> _handleNativeMethodCall(
+    String method,
+    Map<dynamic, dynamic> arguments,
+  ) async {
+    switch (method) {
+      case NativeLiveMethod.requestRefresh:
+        await _reloadFromNative(
+          reloadDataType: ReloadDataType.refreash,
+          preserveFirstLoad: true,
+        );
+        break;
+      case NativeLiveMethod.requestQualityChange:
+        await _reloadFromNative(
+          reloadDataType: ReloadDataType.changeQuality,
+          line: currentLineIndex.value,
+          qualityIndex:
+              (arguments['index'] as num?)?.toInt() ?? currentQuality.value,
+          isReCalculate: false,
+          preserveFirstLoad: true,
+        );
+        break;
+      case NativeLiveMethod.requestLineChange:
+        await _reloadFromNative(
+          reloadDataType: ReloadDataType.changeLine,
+          line: (arguments['index'] as num?)?.toInt() ?? currentLineIndex.value,
+          preserveFirstLoad: true,
+        );
+        break;
+      case NativeLiveMethod.requestChannelSwitch:
+        await NativeLiveBridge.instance.showLoading();
+        final direction = (arguments['direction'] as num?)?.toInt() ?? 1;
+        if (direction < 0) {
+          prevChannel();
+        } else {
+          nextChannel();
+        }
+        break;
+      case NativeLiveMethod.toggleFavorite:
+        _toggleFavoriteRoom(currentPlayRoom.value);
+        await _syncNativeUi();
+        break;
+      case NativeLiveMethod.togglePlaylistFavorite:
+        final index =
+            (arguments['index'] as num?)?.toInt() ??
+            settings.currentPlayListNodeIndex.value;
+        final playList = settings.currentPlayList
+            .whereType<LiveRoom>()
+            .toList();
+        if (index >= 0 && index < playList.length) {
+          _toggleFavoriteRoom(playList[index]);
+          await _syncNativeUi();
+        }
+        break;
+      case NativeLiveMethod.selectPlaylist:
+        final index =
+            (arguments['index'] as num?)?.toInt() ??
+            settings.currentPlayListNodeIndex.value;
+        final playList = settings.currentPlayList
+            .whereType<LiveRoom>()
+            .toList();
+        if (index >= 0 && index < playList.length) {
+          settings.currentPlayListNodeIndex.value = index;
+          currentChannelIndex.value = index;
+          await NativeLiveBridge.instance.showLoading();
+          playFavoriteChannel();
+        }
+        break;
+      case NativeLiveMethod.cycleVideoFit:
+        final index = (arguments['index'] as num?)?.toInt();
+        settings.videoFitIndex.value = (index ?? settings.videoFitIndex.value)
+            .clamp(0, AppConsts.videoFitChineseTranslation.length - 1);
+        await _syncNativeUi();
+        break;
+      case NativeLiveMethod.danmakuSettingChange:
+        final key = arguments['key']?.toString();
+        final value = arguments['value'];
+        if (key != null && value != null) {
+          await _applyNativeDanmakuSetting(key, value);
+        }
+        break;
+      case NativeLiveMethod.playbackError:
+        ToastUtil.show('播放出错，请按确定键刷新');
+        break;
+      case NativeLiveMethod.activityFinished:
+        _nativeLiveStarted = false;
+        if (Get.currentRoute == RoutePath.kLivePlay) {
+          Get.back();
+        }
+        break;
+    }
+  }
+
+  Future<void> _reloadFromNative({
+    required ReloadDataType reloadDataType,
+    int line = 0,
+    int qualityIndex = 0,
+    bool isReCalculate = true,
+    bool preserveFirstLoad = false,
+  }) async {
+    await NativeLiveBridge.instance.showLoading();
+    await disPoserPlayer();
+    if (preserveFirstLoad) {
+      isFirstLoad.value = false;
+    }
+    await onInitPlayerState(
+      reloadDataType: reloadDataType,
+      line: line,
+      currentQuality: qualityIndex,
+      isReCalculate: isReCalculate,
+    );
   }
 }

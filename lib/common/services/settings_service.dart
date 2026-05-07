@@ -47,6 +47,10 @@ class SettingsService extends GetxController {
 
   // 播放器相关
   final videoFitIndex = (HivePrefUtil.getInt('videoFitIndex') ?? 0).obs;
+  final enableAndroidNativePlayer = (HivePrefUtil.getBool('enableAndroidNativePlayer') ?? false).obs;
+  final nativePlayerViewType = (HivePrefUtil.getInt('nativePlayerViewType') ?? 0).obs;
+  final nativePlayerPreferSoftwareDecoder = (HivePrefUtil.getBool('nativePlayerPreferSoftwareDecoder') ?? false).obs;
+  final nativePlayerCompatMode = (HivePrefUtil.getBool('nativePlayerCompatMode') ?? false).obs;
   final videoPlayerIndex = (HivePrefUtil.getInt('videoPlayerIndex') ?? 0).obs;
   final useHardStopOnExit = (HivePrefUtil.getBool('useHardStopOnExit') ?? true).obs;
   final enableCodec = (HivePrefUtil.getBool('enableCodec') ?? true).obs;
@@ -112,6 +116,10 @@ class SettingsService extends GetxController {
   final AppFocusNode backFocusNode = AppFocusNode();
   final AppFocusNode autoRefreshIntervalNode = AppFocusNode();
   final AppFocusNode preferResolutionNode = AppFocusNode();
+  final AppFocusNode androidNativePlayerNode = AppFocusNode();
+  final AppFocusNode nativePlayerViewTypeNode = AppFocusNode();
+  final AppFocusNode nativePlayerDecoderNode = AppFocusNode();
+  final AppFocusNode nativePlayerCompatModeNode = AppFocusNode();
   final AppFocusNode videoPlayerNode = AppFocusNode();
   final AppFocusNode enableCodecNode = AppFocusNode();
   final AppFocusNode audioDelayNode = AppFocusNode();
@@ -139,6 +147,7 @@ class SettingsService extends GetxController {
   List<String> get resolutionsList => PlayerConsts.resolutions;
   List<BoxFit> get videofitArrary => PlayerConsts.videofitList;
   List<String> get playerlist => PlayerConsts.players;
+  bool get supportsAndroidNativePlayer => Platform.isAndroid;
   MemoryImage? get cachedBackgroundImage {
     if (currentBoxImage.isEmpty) return null;
     if (_cachedBase64 != currentBoxImage.value) {
@@ -238,6 +247,22 @@ class SettingsService extends GetxController {
 
     videoFitIndex.listen((value) async {
       await HivePrefUtil.setInt('videoFitIndex', value);
+    });
+
+    enableAndroidNativePlayer.listen((value) async {
+      await HivePrefUtil.setBool('enableAndroidNativePlayer', value);
+    });
+
+    nativePlayerViewType.listen((value) async {
+      await HivePrefUtil.setInt('nativePlayerViewType', value);
+    });
+
+    nativePlayerPreferSoftwareDecoder.listen((value) async {
+      await HivePrefUtil.setBool('nativePlayerPreferSoftwareDecoder', value);
+    });
+
+    nativePlayerCompatMode.listen((value) async {
+      await HivePrefUtil.setBool('nativePlayerCompatMode', value);
     });
 
     hideDanmaku.listen((value) async {

@@ -19,8 +19,9 @@ jobs:
       contents: write
     strategy:
       matrix:
-        # 定义分支矩阵：分别从 main 和 without-exo 分支拉取代码打包
-        branch: [main, without-exo]
+        # # 定义分支矩阵：分别从 main 和 without-exo 分支拉取代码打包
+        # branch: [main, without-exo]
+        branch: [main_opt]
     
     steps:
       # 1. 签出代码：根据矩阵变量动态切换分支

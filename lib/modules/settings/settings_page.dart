@@ -114,51 +114,98 @@ class SettingsPage extends GetView<SettingsService> {
               },
             ),
           ),
-          AppStyle.vGap24,
-          Obx(
-            () => SettingsItemWidget(
-              focusNode: controller.videoPlayerNode,
-              title: "播放器设置",
-              items: const {0: "Mpv播放器", 1: "Ijk播放器", 2: "Exo播放器"},
-              value: controller.videoPlayerIndex.value,
-              onChanged: (e) {
-                controller.videoPlayerIndex.value = e;
-                GlobalPlayerService.instance.playerManager.switchEngine(
-                  PlayerEngine.values[controller.videoPlayerIndex.value],
-                  isManual: true,
-                );
-              },
+          if (controller.supportsAndroidNativePlayer)
+            Obx(
+              () => Column(
+                children: [
+                  AppStyle.vGap24,
+                  SettingsItemWidget(
+                    focusNode: controller.androidNativePlayerNode,
+                    title: "Android直播播放器",
+                    items: const {0: "Flutter播放器", 1: "原生播放器"},
+                    value: controller.enableAndroidNativePlayer.value ? 1 : 0,
+                    onChanged: (e) {
+                      controller.enableAndroidNativePlayer.value = e == 1;
+                    },
+                  ),
+                ],
+              ),
             ),
-          ),
-          AppStyle.vGap24,
-          Obx(
-            () => SettingsItemWidget(
-              focusNode: controller.enableCodecNode,
-              title: "解码设置",
-              items: const {0: "软解码", 1: "硬解码"},
-              value: controller.enableCodec.value ? 1 : 0,
-              onChanged: (e) {
-                controller.enableCodec.value = e == 1;
-              },
-            ),
-          ),
-          AppStyle.vGap24,
-          Obx(
-            () => SettingsItemWidget(
-              focusNode: controller.useHardStopOnExitNode,
-              title: "播放器销毁设置",
-              items: const {0: "软停止缓存复用", 1: "强制释放"},
-              value: controller.useHardStopOnExit.value ? 1 : 0,
-              onChanged: (e) {
-                controller.useHardStopOnExit.value = e == 1;
-              },
-            ),
-          ),
-
-          if (controller.videoPlayerIndex.value == 0)
-            Obx(() {
+          Obx(() {
+            final useNativePlayer = controller.supportsAndroidNativePlayer && controller.enableAndroidNativePlayer.value;
+            if (useNativePlayer) {
               return Column(
                 children: [
+                  AppStyle.vGap24,
+                  SettingsItemWidget(
+                    focusNode: controller.nativePlayerViewTypeNode,
+                    title: "渲染方式",
+                    items: const {0: "SurfaceView", 1: "TextureView"},
+                    value: controller.nativePlayerViewType.value,
+                    onChanged: (e) {
+                      controller.nativePlayerViewType.value = e;
+                    },
+                  ),
+                  AppStyle.vGap24,
+                  SettingsItemWidget(
+                    focusNode: controller.nativePlayerDecoderNode,
+                    title: "解码设置",
+                    items: const {0: "硬解优先", 1: "软解优先"},
+                    value: controller.nativePlayerPreferSoftwareDecoder.value ? 1 : 0,
+                    onChanged: (e) {
+                      controller.nativePlayerPreferSoftwareDecoder.value = e == 1;
+                    },
+                  ),
+                  AppStyle.vGap24,
+                  SettingsItemWidget(
+                    focusNode: controller.nativePlayerCompatModeNode,
+                    title: "兼容模式",
+                    items: const {0: "关闭", 1: "打开"},
+                    value: controller.nativePlayerCompatMode.value ? 1 : 0,
+                    onChanged: (e) {
+                      controller.nativePlayerCompatMode.value = e == 1;
+                    },
+                  ),
+                ],
+              );
+            }
+            return Column(
+              children: [
+                AppStyle.vGap24,
+                SettingsItemWidget(
+                  focusNode: controller.videoPlayerNode,
+                  title: "播放器设置",
+                  items: const {0: "Mpv播放器", 1: "Ijk播放器", 2: "Exo播放器"},
+                  value: controller.videoPlayerIndex.value,
+                  onChanged: (e) {
+                    controller.videoPlayerIndex.value = e;
+                    GlobalPlayerService.instance.playerManager.switchEngine(
+                      PlayerEngine.values[controller.videoPlayerIndex.value],
+                      isManual: true,
+                    );
+                  },
+                ),
+                AppStyle.vGap24,
+                SettingsItemWidget(
+                  focusNode: controller.enableCodecNode,
+                  title: "解码设置",
+                  items: const {0: "软解码", 1: "硬解码"},
+                  value: controller.enableCodec.value ? 1 : 0,
+                  onChanged: (e) {
+                    controller.enableCodec.value = e == 1;
+                  },
+                ),
+                AppStyle.vGap24,
+                SettingsItemWidget(
+                  focusNode: controller.useHardStopOnExitNode,
+                  title: "播放器销毁设置",
+                  items: const {0: "软停止缓存复用", 1: "强制释放"},
+                  value: controller.useHardStopOnExit.value ? 1 : 0,
+                  onChanged: (e) {
+                    controller.useHardStopOnExit.value = e == 1;
+                  },
+                ),
+                if (controller.videoPlayerIndex.value == 0) ...[
                   AppStyle.vGap24,
                   SettingsItemWidget(
                     focusNode: controller.audioDelayNode,
@@ -181,8 +228,9 @@ class SettingsPage extends GetView<SettingsService> {
                     },
                   ),
                 ],
-              );
-            }),
+              ],
+            );
+          }),
           Obx(
             () => SettingsItemWidget(
               focusNode: controller.preferPlatformNode,

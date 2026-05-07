@@ -10,6 +10,7 @@ import 'package:pure_live/common/base/base_controller.dart';
 import 'package:android_tv_text_field/native_textfield_tv.dart';
 
 class HomeController extends BasePageController {
+  static const int recentHistoryLimit = 10;
   var datetime = "00:00".obs;
   static final _formatter = DateFormat('yyyy年MM月dd日 HH:mm:ss', 'zh_CN');
   Timer? _timer;
@@ -91,14 +92,17 @@ class HomeController extends BasePageController {
     datetime.value = _formatter.format(DateTime.now());
   }
 
+  List<LiveRoom> getRecentHistoryRooms() {
+    return settingsService.historyRooms.value.take(recentHistoryLimit).toList();
+  }
+
   @override
   Future<List<LiveRoom>> getData(int page, int pageSize) async {
     List<Future<LiveRoom>> futures = [];
-    var historyRooms = settingsService.historyRooms.value
-        .where((room) => room.liveStatus == LiveStatus.live)
-        .take(8)
-        .toList();
+    var historyRooms = getRecentHistoryRooms();
     if (historyRooms.isEmpty) {
+      rooms.value = [];
+      hisToryFocusNodes = [];
       return [];
     }
     for (final room in historyRooms) {
@@ -112,10 +116,7 @@ class HomeController extends BasePageController {
     } catch (e) {
       return historyRooms;
     }
-    historyRooms = settingsService.historyRooms.value
-        .where((room) => room.liveStatus == LiveStatus.live)
-        .take(8)
-        .toList();
+    historyRooms = getRecentHistoryRooms();
     rooms.value = historyRooms;
     hisToryFocusNodes = List.generate(rooms.length, (_) => AppFocusNode());
     return historyRooms;

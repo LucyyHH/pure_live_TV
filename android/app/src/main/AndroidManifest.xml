@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools" package="com.mystyle.purelive">
-    <uses-sdk android:minSdkVersion="21"
+    <uses-sdk android:minSdkVersion="23"
     tools:overrideLibrary="androidx.camera.core,de.bytepark.autoorientation, 
                                androidx.camera.camera2, 
                                androidx.camera.lifecycle, 
@@ -94,6 +94,13 @@
         <category android:name="android.intent.category.LAUNCHER" />
       </intent-filter>
     </activity>
+    <activity
+      android:name=".live.LivePlayActivity"
+      android:exported="false"
+      android:screenOrientation="landscape"
+      android:hardwareAccelerated="true"
+      android:configChanges="orientation|keyboardHidden|keyboard|screenSize|screenLayout|uiMode|navigation|density|fontScale"
+      android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
     <meta-data
             android:name="com.google.android.gms.tv.application.banner"
             android:resource="@drawable/app_banner" />

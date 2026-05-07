@@ -51,6 +51,11 @@ class LivePlayPage extends GetWidget<LivePlayController> {
   }
 
   Widget buildVideoPlayer() {
+    if (controller.useNativePlayer) {
+      return Obx(
+        () => controller.success.value ? const ColoredBox(color: Colors.black) : buildLoading(),
+      );
+    }
     return Hero(
       tag: controller.room.roomId!,
       child: AspectRatio(
