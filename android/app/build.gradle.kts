@@ -46,7 +46,11 @@ android {
 
     defaultConfig {
         applicationId = "com.mystyle.purelive"
-        minSdk = localProperties.getProperty("flutter.minSdkVersion")?.toInt()
+        minSdk = maxOf(
+            23,
+            localProperties.getProperty("flutter.minSdkVersion")?.toIntOrNull()
+                ?: flutter.minSdkVersion,
+        )
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
@@ -81,4 +85,14 @@ android {
 
 flutter {
     source = "../.."
-}    
+}
+
+dependencies {
+    val media3Version = "1.9.2"
+    implementation("androidx.media3:media3-exoplayer:$media3Version")
+    implementation("androidx.media3:media3-ui:$media3Version")
+    implementation("androidx.media3:media3-exoplayer-hls:$media3Version")
+    implementation("androidx.media3:media3-exoplayer-dash:$media3Version")
+    implementation("androidx.media3:media3-exoplayer-rtsp:$media3Version")
+    implementation("androidx.media3:media3-exoplayer-smoothstreaming:$media3Version")
+}

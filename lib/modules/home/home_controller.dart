@@ -10,11 +10,21 @@ import 'package:pure_live/common/base/base_controller.dart';
 import 'package:android_tv_text_field/native_textfield_tv.dart';
 
 class HomeController extends BasePageController {
+  static const int recentHistoryLimit = 10;
   var datetime = "00:00".obs;
   static final _formatter = DateFormat('yyyy年MM月dd日 HH:mm:ss', 'zh_CN');
   Timer? _timer;
-  static List<String> mainPageOptions = ["直播关注", "热门直播", "分区类别", "关注分区", '链接放映', "搜索直播", "观看记录"];
-  final NativeTextFieldController roomSearchController = NativeTextFieldController();
+  static List<String> mainPageOptions = [
+    "直播关注",
+    "热门直播",
+    "分区类别",
+    "关注分区",
+    '链接放映',
+    "搜索直播",
+    "观看记录",
+  ];
+  final NativeTextFieldController roomSearchController =
+      NativeTextFieldController();
   final searchFocusNode = FocusNode();
   final ScrollController listScrollController = ScrollController();
   final hasNewVersion = false.obs;
@@ -30,7 +40,10 @@ class HomeController extends BasePageController {
   var rooms = <LiveRoom>[].obs;
   var currentNodeIndex = 1.obs;
   // button列表再加上设置最近观看
-  List<AppFocusNode> focusNodes = List.generate(mainPageOptions.length + 2, (_) => AppFocusNode());
+  List<AppFocusNode> focusNodes = List.generate(
+    mainPageOptions.length + 2,
+    (_) => AppFocusNode(),
+  );
   List<AppFocusNode> hisToryFocusNodes = [];
   AppFocusNode versionFocusNode = AppFocusNode();
   final syncNode = AppFocusNode();
@@ -44,7 +57,11 @@ class HomeController extends BasePageController {
       hisToryFocusNodes = List.generate(rooms.length, (_) => AppFocusNode());
       refreshData();
       focusNodes[1].isFoucsed.listen((p0) {
-        listScrollController.animateTo(0.0, duration: const Duration(milliseconds: 200), curve: Curves.linear);
+        listScrollController.animateTo(
+          0.0,
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.linear,
+        );
       });
       focusNodes[mainPageOptions.length].isFoucsed.listen((p0) {
         listScrollController.animateTo(
@@ -93,18 +110,33 @@ class HomeController extends BasePageController {
     datetime.value = _formatter.format(DateTime.now());
   }
 
+  List<LiveRoom> getRecentHistoryRooms() {
+    return settingsService.historyRooms.value
+        .where(
+          (room) =>
+              room.liveStatus == LiveStatus.live &&
+              room.platform != Sites.iptvSite,
+        )
+        .take(recentHistoryLimit)
+        .toList();
+  }
+
   @override
   Future<List<LiveRoom>> getData(int page, int pageSize) async {
     List<Future<LiveRoom>> futures = [];
-    var historyRooms = settingsService.historyRooms.value
-        .where((room) => room.liveStatus == LiveStatus.live && room.platform != Sites.iptvSite)
-        .take(8)
-        .toList();
+    var historyRooms = getRecentHistoryRooms();
     if (historyRooms.isEmpty) {
+      rooms.value = [];
+      hisToryFocusNodes = [];
       return [];
     }
     for (final room in historyRooms) {
-      futures.add(Sites.of(room.platform!).liveSite.getRoomDetail(roomId: room.roomId!, platform: room.platform!));
+      futures.add(
+        Sites.of(room.platform!).liveSite.getRoomDetail(
+          roomId: room.roomId!,
+          platform: room.platform!,
+        ),
+      );
     }
     try {
       final futuresRooms = await Future.wait(futures);
@@ -115,10 +147,7 @@ class HomeController extends BasePageController {
       log(e.toString());
       return historyRooms;
     }
-    historyRooms = settingsService.historyRooms.value
-        .where((room) => room.liveStatus == LiveStatus.live && room.platform != Sites.iptvSite)
-        .take(8)
-        .toList();
+    historyRooms = getRecentHistoryRooms();
     rooms.value = historyRooms;
     hisToryFocusNodes = List.generate(rooms.length, (_) => AppFocusNode());
     return historyRooms;
