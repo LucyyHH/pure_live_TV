@@ -14,6 +14,9 @@ class FavoriteController extends GetxController {
   final offlineRoomsNodes = AppFocusNode();
 
   bool isFirstLoad = true;
+  StreamSubscription<List<LiveRoom>>? _favoriteRoomsSubscription;
+  int _refreshGeneration = 0;
+  bool _isClosed = false;
 
   var loading = true.obs;
 
@@ -23,7 +26,9 @@ class FavoriteController extends GetxController {
     onlineRoomsNodes.requestFocus();
     syncRooms();
 
-    settings.favoriteRooms.listen((rooms) => syncRooms());
+    _favoriteRoomsSubscription = settings.favoriteRooms.listen(
+      (_) => syncRooms(),
+    );
 
     if (settings.autoRefreshFavorite.value) {
       int interval = settings.autoRefreshInterval.value;
@@ -42,22 +47,43 @@ class FavoriteController extends GetxController {
     }
   }
 
-  final onlineRooms = [].obs;
-  final offlineRooms = [].obs;
+  final onlineRooms = <LiveRoom>[].obs;
+  final offlineRooms = <LiveRoom>[].obs;
 
   void syncRooms() {
+    if (_isClosed) return;
     loading.value = true;
     onlineRooms.clear();
     offlineRooms.clear();
-    onlineRooms.addAll(settings.favoriteRooms.where((room) => room.liveStatus == LiveStatus.live));
-    offlineRooms.addAll(settings.favoriteRooms.where((room) => room.liveStatus != LiveStatus.live));
+    onlineRooms.addAll(
+      settings.favoriteRooms.where(
+        (room) => room.liveStatus == LiveStatus.live,
+      ),
+    );
+    offlineRooms.addAll(
+      settings.favoriteRooms.where(
+        (room) => room.liveStatus != LiveStatus.live,
+      ),
+    );
     for (var room in onlineRooms) {
       if (int.tryParse(room.watching!) == null) {
         room.watching = "0";
       }
     }
-    onlineRooms.sort((a, b) => int.parse(b.watching!).compareTo(int.parse(a.watching!)));
+    onlineRooms.sort(
+      (a, b) => int.parse(b.watching!).compareTo(int.parse(a.watching!)),
+    );
     loading.value = false;
+  }
+
+  @override
+  void onClose() {
+    _isClosed = true;
+    _refreshGeneration++;
+    _favoriteRoomsSubscription?.cancel();
+    onlineRoomsNodes.dispose();
+    offlineRoomsNodes.dispose();
+    super.onClose();
   }
 
   Future<void> handleFollowLongTap(LiveRoom room) async {
@@ -78,16 +104,23 @@ class FavoriteController extends GetxController {
   }
 
   Future<bool> onRefresh() async {
+    final refreshGeneration = ++_refreshGeneration;
     final Pool refreshPool = Pool(settings.maxConcurrentRefresh.value);
+    if (_isClosed) return false;
     loading.value = true;
     try {
       final rooms = settings.favoriteRooms.value.where((room) {
-        return room.roomId != null && room.roomId!.isNotEmpty && room.platform != null && room.platform!.isNotEmpty;
+        return room.roomId != null &&
+            room.roomId!.isNotEmpty &&
+            room.platform != null &&
+            room.platform!.isNotEmpty;
       }).toList();
 
       if (rooms.isEmpty) {
         debugPrint('没有有效的收藏房间需要刷新');
-        loading.value = false;
+        if (!_isClosed && refreshGeneration == _refreshGeneration) {
+          loading.value = false;
+        }
         return false;
       }
 
@@ -99,10 +132,10 @@ class FavoriteController extends GetxController {
               return;
             }
 
-            final liveRoom = await Sites.of(
-              room.platform!,
-            ).liveSite.getRoomDetail(roomId: room.roomId!, platform: room.platform!);
+            final liveRoom = await Sites.of(room.platform!).liveSite
+                .getRoomDetail(roomId: room.roomId!, platform: room.platform!);
 
+            if (_isClosed || refreshGeneration != _refreshGeneration) return;
             settings.updateRoom(liveRoom);
           } catch (e, stack) {
             debugPrint('================ 刷新失败记录 ================');
@@ -122,11 +155,12 @@ class FavoriteController extends GetxController {
     } catch (e) {
       debugPrint('刷新过程中发生全局错误: $e');
     } finally {
-      // 4. 数据同步和状态重置
-      syncRooms();
-      isFirstLoad = false;
-      loading.value = false;
+      if (!_isClosed && refreshGeneration == _refreshGeneration) {
+        syncRooms();
+        isFirstLoad = false;
+        loading.value = false;
+      }
     }
-    return true;
+    return !_isClosed && refreshGeneration == _refreshGeneration;
   }
 }

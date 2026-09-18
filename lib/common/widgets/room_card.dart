@@ -167,6 +167,8 @@ class _RoomCardState extends State<RoomCard> {
     try {
       return CachedNetworkImageProvider(
         avatar,
+        maxWidth: (80.w).round(),
+        maxHeight: (80.h).round(),
         errorListener: (err) {
           log("CachedNetworkImageProvider: Image failed to load!");
         },
@@ -205,8 +207,7 @@ class _RoomCardState extends State<RoomCard> {
             }
           : widget.onLongTap,
       borderRadius: AppStyle.radius16,
-      child: Obx(
-        () => Column(
+      child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
@@ -224,22 +225,30 @@ class _RoomCardState extends State<RoomCard> {
                         color: Theme.of(context).focusColor,
                         elevation: 0,
                         child: widget.room.liveStatus == LiveStatus.offline
-                            ? Center(
-                                child: Icon(
-                                  Icons.tv_off_rounded,
-                                  size: widget.dense ? 36 : 60,
-                                  color: widget.focusNode.isFoucsed.value ? Colors.black : Colors.white,
+                            ? Obx(
+                                () => Center(
+                                  child: Icon(
+                                    Icons.tv_off_rounded,
+                                    size: widget.dense ? 36 : 60,
+                                    color: widget.focusNode.isFoucsed.value ? Colors.black : Colors.white,
+                                  ),
                                 ),
                               )
                             : CachedNetworkImage(
                                 imageUrl: widget.room.cover!,
                                 cacheManager: CustomCacheManager.instance,
+                                memCacheWidth: (480.w).round(),
+                                memCacheHeight: (270.h).round(),
+                                maxWidthDiskCache: (960.w).round(),
+                                maxHeightDiskCache: (540.h).round(),
                                 fit: BoxFit.fill,
-                                errorWidget: (context, error, stackTrace) => Center(
-                                  child: Icon(
-                                    color: widget.focusNode.isFoucsed.value ? Colors.black : Colors.white,
-                                    Icons.live_tv_rounded,
-                                    size: widget.dense ? 38 : 62,
+                                errorWidget: (context, error, stackTrace) => Obx(
+                                  () => Center(
+                                    child: Icon(
+                                      color: widget.focusNode.isFoucsed.value ? Colors.black : Colors.white,
+                                      Icons.live_tv_rounded,
+                                      size: widget.dense ? 38 : 62,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -289,21 +298,23 @@ class _RoomCardState extends State<RoomCard> {
               padding: AppStyle.edgeInsetsH20,
               child: SizedBox(
                 height: 56.w,
-                child: widget.focusNode.isFoucsed.value && widget.room.title!.isNotEmpty
-                    ? MarqueeList(
-                        scrollDirection: Axis.horizontal,
-                        scrollDuration: const Duration(seconds: 2),
-                        children: [Text(widget.room.title ?? '未设置标题', style: AppStyle.textStyleBlack)],
-                      )
-                    : Container(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          widget.room.title ?? '未设置标题',
-                          style: AppStyle.textStyleWhite,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                child: Obx(
+                  () => widget.focusNode.isFoucsed.value && widget.room.title!.isNotEmpty
+                      ? MarqueeList(
+                          scrollDirection: Axis.horizontal,
+                          scrollDuration: const Duration(seconds: 2),
+                          children: [Text(widget.room.title ?? '未设置标题', style: AppStyle.textStyleBlack)],
+                        )
+                      : Container(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            widget.room.title ?? '未设置标题',
+                            style: AppStyle.textStyleWhite,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ),
+                ),
               ),
             ),
             Row(
@@ -320,11 +331,13 @@ class _RoomCardState extends State<RoomCard> {
                 ),
                 AppStyle.hGap8,
                 Expanded(
-                  child: Text(
-                    widget.room.nick!,
-                    style: widget.focusNode.isFoucsed.value ? AppStyle.subTextStyleBlack : AppStyle.subTextStyleWhite,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  child: Obx(
+                    () => Text(
+                      widget.room.nick!,
+                      style: widget.focusNode.isFoucsed.value ? AppStyle.subTextStyleBlack : AppStyle.subTextStyleWhite,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ),
               ],
@@ -332,7 +345,6 @@ class _RoomCardState extends State<RoomCard> {
             AppStyle.vGap12,
           ],
         ),
-      ),
     );
   }
 }

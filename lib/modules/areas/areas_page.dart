@@ -35,7 +35,10 @@ class AreasPage extends GetView<AreasListController> {
               AppStyle.hGap32,
               Text(
                 "分区类别",
-                style: AppStyle.titleStyleWhite.copyWith(fontSize: 36.w, fontWeight: FontWeight.bold),
+                style: AppStyle.titleStyleWhite.copyWith(
+                  fontSize: 36.w,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               AppStyle.hGap24,
               const Spacer(),
@@ -45,7 +48,10 @@ class AreasPage extends GetView<AreasListController> {
                   child: SizedBox(
                     width: 48.w,
                     height: 48.w,
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 4.w),
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 4.w,
+                    ),
                   ),
                 ),
               ),
@@ -69,9 +75,15 @@ class AreasPage extends GetView<AreasListController> {
               Sites().availableSites().length,
               (index) => Obx(
                 () => HighlightButton(
-                  icon: Image.asset(Sites().availableSites()[index].logo, width: 48.w, height: 48.w),
+                  icon: Image.asset(
+                    Sites().availableSites()[index].logo,
+                    width: 48.w,
+                    height: 48.w,
+                  ),
                   text: Sites().availableSites()[index].name,
-                  selected: controller.siteId.value == Sites().availableSites()[index].id,
+                  selected:
+                      controller.siteId.value ==
+                      Sites().availableSites()[index].id,
                   focusNode: controller.focusNodes[index + 1],
                   onTap: () {
                     controller.setSite(Sites().availableSites()[index].id);
@@ -88,9 +100,18 @@ class AreasPage extends GetView<AreasListController> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      LottieBuilder.asset('assets/lotties/empty.json', width: 160.w, height: 160.w, repeat: false),
+                      LottieBuilder.asset(
+                        'assets/lotties/empty.json',
+                        width: 160.w,
+                        height: 160.w,
+                        repeat: false,
+                      ),
                       AppStyle.vGap24,
-                      Text("暂无分区类目\n请打开设置展示平台", textAlign: TextAlign.center, style: AppStyle.textStyleWhite),
+                      Text(
+                        "暂无分区类目\n请打开设置展示平台",
+                        textAlign: TextAlign.center,
+                        style: AppStyle.textStyleWhite,
+                      ),
                     ],
                   ),
                 );
@@ -101,70 +122,87 @@ class AreasPage extends GetView<AreasListController> {
               }
 
               if (controller.siteId.value == Sites.douyinSite) {
-                final allChildren = controller.list.expand((cat) => cat.children).toList();
+                final allChildren = controller.list
+                    .expand((cat) => cat.children)
+                    .toList();
 
-                return SingleChildScrollView(
-                  padding: AppStyle.edgeInsetsH48,
+                return CustomScrollView(
                   controller: controller.scrollController,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Padding(
-                        padding: AppStyle.edgeInsetsV32,
-                        child: Text(controller.list[0].name, style: AppStyle.titleStyleWhite),
+                  slivers: [
+                    SliverPadding(
+                      padding: AppStyle.edgeInsetsH48,
+                      sliver: SliverToBoxAdapter(
+                        child: Padding(
+                          padding: AppStyle.edgeInsetsV32,
+                          child: Text(
+                            controller.list[0].name,
+                            style: AppStyle.titleStyleWhite,
+                          ),
+                        ),
                       ),
-                      GridView.count(
-                        shrinkWrap: true,
-                        padding: AppStyle.edgeInsetsV8,
-                        physics: const NeverScrollableScrollPhysics(),
-                        crossAxisCount: 8,
-                        crossAxisSpacing: 20.w,
-                        mainAxisSpacing: 20.w,
-                        children: allChildren.map((childItem) => buildSubCategory(childItem)).toList(),
-                      ),
-                    ],
-                  ),
-                );
-              }
-
-              return ListView.builder(
-                padding: AppStyle.edgeInsetsH48,
-                itemCount: controller.list.length,
-                controller: controller.scrollController,
-                itemBuilder: (_, i) {
-                  var item = controller.list[i];
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Padding(
-                        padding: AppStyle.edgeInsetsV32,
-                        child: Text(item.name, style: AppStyle.titleStyleWhite),
-                      ),
-                      if (controller.siteId.value != Sites.iptvSite)
-                        GridView.count(
-                          shrinkWrap: true,
-                          padding: AppStyle.edgeInsetsV8,
-                          physics: const NeverScrollableScrollPhysics(),
+                    ),
+                    SliverPadding(
+                      padding: AppStyle.edgeInsetsH48 + AppStyle.edgeInsetsV8,
+                      sliver: SliverGrid(
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                           crossAxisCount: 8,
                           crossAxisSpacing: 20.w,
                           mainAxisSpacing: 20.w,
-                          children: List.generate(
-                            item.children.length,
-                            (index) => buildSubCategory(item.children[index]),
-                          ).toList(),
-                        )
-                      else
-                        MasonryGridView.count(
-                          padding: AppStyle.edgeInsetsA48,
-                          itemCount: item.children.length,
+                        ),
+                        delegate: SliverChildBuilderDelegate(
+                          (_, index) => buildSubCategory(allChildren[index]),
+                          childCount: allChildren.length,
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              }
+
+              return CustomScrollView(
+                controller: controller.scrollController,
+                slivers: [
+                  for (final item in controller.list) ...[
+                    SliverPadding(
+                      padding: AppStyle.edgeInsetsH48,
+                      sliver: SliverToBoxAdapter(
+                        child: Padding(
+                          padding: AppStyle.edgeInsetsV32,
+                          child: Text(
+                            item.name,
+                            style: AppStyle.titleStyleWhite,
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (controller.siteId.value != Sites.iptvSite)
+                      SliverPadding(
+                        padding: AppStyle.edgeInsetsH48 + AppStyle.edgeInsetsV8,
+                        sliver: SliverGrid(
+                          gridDelegate:
+                              SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 8,
+                                crossAxisSpacing: 20.w,
+                                mainAxisSpacing: 20.w,
+                              ),
+                          delegate: SliverChildBuilderDelegate(
+                            (_, index) =>
+                                buildSubCategory(item.children[index]),
+                            childCount: item.children.length,
+                          ),
+                        ),
+                      )
+                    else
+                      SliverPadding(
+                        padding: AppStyle.edgeInsetsA48,
+                        sliver: SliverMasonryGrid.count(
+                          childCount: item.children.length,
                           crossAxisCount: 5,
                           crossAxisSpacing: 24.w,
                           mainAxisSpacing: 20.w,
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          itemBuilder: (_, i) {
-                            LiveArea liveArea = item.children[i];
-                            var roomItem = LiveRoom(
+                          itemBuilder: (_, index) {
+                            final liveArea = item.children[index];
+                            final roomItem = LiveRoom(
                               roomId: liveArea.areaId,
                               title: liveArea.areaName,
                               cover: '',
@@ -178,6 +216,7 @@ class AreasPage extends GetView<AreasListController> {
                               platform: 'iptv',
                             );
                             return RoomCard(
+                              key: ValueKey('iptv-${liveArea.areaId}'),
                               room: roomItem,
                               dense: true,
                               focusNode: liveArea.focusNode,
@@ -187,9 +226,9 @@ class AreasPage extends GetView<AreasListController> {
                             );
                           },
                         ),
-                    ],
-                  );
-                },
+                      ),
+                  ],
+                ],
               );
             }),
           ),
@@ -237,17 +276,25 @@ class AreasPage extends GetView<AreasListController> {
           Container(
             width: 100.w,
             height: 100.w,
-            decoration: BoxDecoration(borderRadius: BorderRadius.circular(30.w)),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(30.w),
+            ),
             child: displayImageUrl.isNotEmpty
                 ? CachedNetworkImage(
                     imageUrl: displayImageUrl,
                     cacheManager: CustomCacheManager.instance,
+                    memCacheWidth: (200.w).round(),
+                    memCacheHeight: (200.w).round(),
+                    maxWidthDiskCache: (400.w).round(),
+                    maxHeightDiskCache: (400.w).round(),
                     fit: BoxFit.fill,
                     errorWidget: (context, error, stackTrace) => Center(
                       child: Icon(
                         Icons.live_tv_rounded,
                         size: 50,
-                        color: item.focusNode.isFoucsed.value ? Colors.black : Colors.white,
+                        color: item.focusNode.isFoucsed.value
+                            ? Colors.black
+                            : Colors.white,
                       ),
                     ),
                   )
@@ -255,12 +302,19 @@ class AreasPage extends GetView<AreasListController> {
                     child: Icon(
                       Icons.live_tv_rounded,
                       size: 50,
-                      color: item.focusNode.isFoucsed.value ? Colors.black : Colors.white,
+                      color: item.focusNode.isFoucsed.value
+                          ? Colors.black
+                          : Colors.white,
                     ),
                   ),
           ),
           AppStyle.vGap12,
-          Text(item.areaName!, maxLines: 1, textAlign: TextAlign.center, style: AppStyle.textStyleWhite),
+          Text(
+            item.areaName!,
+            maxLines: 1,
+            textAlign: TextAlign.center,
+            style: AppStyle.textStyleWhite,
+          ),
         ],
       ),
     );
@@ -280,7 +334,9 @@ class AreasPage extends GetView<AreasListController> {
           "显示全部",
           maxLines: 1,
           textAlign: TextAlign.center,
-          style: item.moreFocusNode.isFoucsed.value ? AppStyle.textStyleBlack : AppStyle.textStyleWhite,
+          style: item.moreFocusNode.isFoucsed.value
+              ? AppStyle.textStyleBlack
+              : AppStyle.textStyleWhite,
         ),
       ),
     );
@@ -300,7 +356,9 @@ class AreasPage extends GetView<AreasListController> {
           "收起",
           maxLines: 1,
           textAlign: TextAlign.center,
-          style: item.moreFocusNode.isFoucsed.value ? AppStyle.textStyleBlack : AppStyle.textStyleWhite,
+          style: item.moreFocusNode.isFoucsed.value
+              ? AppStyle.textStyleBlack
+              : AppStyle.textStyleWhite,
         ),
       ),
     );

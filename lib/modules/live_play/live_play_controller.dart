@@ -80,13 +80,16 @@ class LivePlayController extends StateController {
 
   @override
   void onClose() {
-    disPoserPlayer();
+    channelTimer?.cancel();
+    doubleClickTimer?.cancel();
+    unawaited(disPoserPlayer());
     super.onClose();
   }
 
   @override
-  dispose() {
-    videoController?.dispose();
+  void dispose() {
+    channelTimer?.cancel();
+    doubleClickTimer?.cancel();
     super.dispose();
   }
 
@@ -211,7 +214,9 @@ class LivePlayController extends StateController {
 
   void resetGlobalListState() {
     var index = settings.currentPlayList.indexWhere(
-      (element) => element.roomId == currentPlayRoom.value.roomId && element.platform == currentPlayRoom.value.platform,
+      (element) =>
+          element.roomId == currentPlayRoom.value.roomId &&
+          element.platform == currentPlayRoom.value.platform,
     );
     currentChannelIndex.value = index > -1 ? index : 0;
     settings.currentPlayListNodeIndex.value = currentChannelIndex.value;
@@ -228,13 +233,20 @@ class LivePlayController extends StateController {
     liveDanmaku = currentSite.liveSite.getDanmaku();
     channelTimer?.cancel();
 
-    handleCurrentLineAndQuality(reloadDataType: reloadDataType, line: line, isReCalculate: isReCalculate);
+    handleCurrentLineAndQuality(
+      reloadDataType: reloadDataType,
+      line: line,
+      isReCalculate: isReCalculate,
+    );
     var liveRoom = await currentSite.liveSite.getRoomDetail(
       roomId: currentPlayRoom.value.roomId!,
       platform: currentPlayRoom.value.platform!,
     );
     if (currentSite.id == Sites.iptvSite) {
-      liveRoom = liveRoom.copyWith(title: currentPlayRoom.value.title!, nick: currentPlayRoom.value.nick!);
+      liveRoom = liveRoom.copyWith(
+        title: currentPlayRoom.value.title!,
+        nick: currentPlayRoom.value.nick!,
+      );
     }
     detail.value = liveRoom;
     resetGlobalListState();
@@ -285,13 +297,13 @@ class LivePlayController extends StateController {
       liveDanmaku.onReady = null;
 
       if (videoController != null) {
-        videoController?.dispose();
+        await videoController!.destroy();
         videoController = null;
       }
       success.value = false;
       isFirstLoad.value = true;
       focusNode.requestFocus();
-      GlobalPlayerService.instance.playerManager.close();
+      await GlobalPlayerService.instance.playerManager.close();
       _clearCacheEmoji();
     } catch (e) {
       log(e.toString(), name: 'disPoserPlayer');
@@ -319,7 +331,9 @@ class LivePlayController extends StateController {
     // 移除系统消息添加逻辑（原messages相关）
     liveDanmaku.onMessage = (msg) {
       if (msg.type == LiveMessageType.chat) {
-        if (settings.shieldList.every((element) => !msg.message.contains(element))) {
+        if (settings.shieldList.every(
+          (element) => !msg.message.contains(element),
+        )) {
           // 保留弹幕发送到播放器的核心功能，移除messages添加
           if (videoController != null) {
             videoController?.sendDanmakuMessage(msg);
@@ -343,7 +357,9 @@ class LivePlayController extends StateController {
   /// 初始化播放器
   void getPlayQualites() async {
     try {
-      var playQualites = await currentSite.liveSite.getPlayQualites(detail: detail.value!);
+      var playQualites = await currentSite.liveSite.getPlayQualites(
+        detail: detail.value!,
+      );
       if (playQualites.isEmpty) {
         ToastUtil.show("无法读取视频信息,请按确定键重新获取");
         success.value = false;
@@ -353,7 +369,9 @@ class LivePlayController extends StateController {
       // 第一次加载 使用系统默认线路
       if (isFirstLoad.value) {
         String userPrefer = settings.preferResolution.value;
-        List<String> availableQualities = playQualites.map((e) => e.quality).toList();
+        List<String> availableQualities = playQualites
+            .map((e) => e.quality)
+            .toList();
         int matchedIndex = availableQualities.indexOf(userPrefer);
         // 尝试直接匹配用户偏好的分辨率
         if (matchedIndex != -1) {
@@ -366,7 +384,8 @@ class LivePlayController extends StateController {
         List<String> systemResolutions = settings.resolutionsList;
         int preferLevel = systemResolutions.indexOf(userPrefer);
         double preferRatio = preferLevel / (systemResolutions.length - 1);
-        int targetIndex = (preferRatio * (availableQualities.length - 1)).round();
+        int targetIndex = (preferRatio * (availableQualities.length - 1))
+            .round();
         // 确保索引在有效范围内
         targetIndex = targetIndex.clamp(0, availableQualities.length - 1);
         currentQuality.value = targetIndex;
@@ -413,7 +432,8 @@ class LivePlayController extends StateController {
         "cache-control": "no-cache",
         "dnt": "1",
         "pragma": "no-cache",
-        "sec-ch-ua": '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
+        "sec-ch-ua":
+            '"Not A(Brand";v="99", "Google Chrome";v="121", "Chromium";v="121"',
         "sec-ch-ua-mobile": "?0",
         "sec-ch-ua-platform": '"macOS"',
         "sec-fetch-dest": "document",
@@ -427,7 +447,11 @@ class LivePlayController extends StateController {
       };
     } else if (currentSite.id == 'huya') {
       var ua = await HuyaSite().getHuYaUA();
-      headers = {"user-agent": ua, "origin": "https://www.huya.com", "cookie": settings.huyaCookie.value};
+      headers = {
+        "user-agent": ua,
+        "origin": "https://www.huya.com",
+        "cookie": settings.huyaCookie.value,
+      };
     } else if (currentSite.id == Sites.iptvSite) {
       if (settings.customIptvUserAgent.value.isNotEmpty) {
         headers = {"user-agent": settings.customIptvUserAgent.value};
@@ -469,7 +493,7 @@ class LivePlayController extends StateController {
     currentPlayRoom.value = nextChannel;
     isNextOrPrev = 1;
     channelTimer?.cancel();
-    channelTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    channelTimer = Timer(const Duration(seconds: 1), () {
       lastChannelIndex.value = currentChannelIndex.value;
       EmojiManager().preload(Sites.of(nextChannel.platform!).id);
       resetRoom(Sites.of(nextChannel.platform!), nextChannel.roomId!);
@@ -497,7 +521,7 @@ class LivePlayController extends StateController {
     currentPlayRoom.value = nextChannel;
     isNextOrPrev = 0;
     channelTimer?.cancel();
-    channelTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    channelTimer = Timer(const Duration(seconds: 1), () {
       lastChannelIndex.value = currentChannelIndex.value;
       EmojiManager().preload(Sites.of(nextChannel.platform!).id);
       resetRoom(Sites.of(nextChannel.platform!), nextChannel.roomId!);
@@ -519,7 +543,7 @@ class LivePlayController extends StateController {
     isNextOrPrev = 0;
     isFirstLoad.value = true;
     channelTimer?.cancel();
-    channelTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+    channelTimer = Timer(const Duration(seconds: 1), () {
       lastChannelIndex.value = currentChannelIndex.value;
       EmojiManager().preload(Sites.of(nextChannel.platform!).id);
       resetRoom(Sites.of(nextChannel.platform!), nextChannel.roomId!);
@@ -564,7 +588,10 @@ class LivePlayController extends StateController {
         key.logicalKey == LogicalKeyboardKey.controlRight ||
         key.logicalKey == LogicalKeyboardKey.controlLeft) {
       restoryQualityAndLines();
-      resetRoom(Sites.of(currentPlayRoom.value.platform!), currentPlayRoom.value.roomId!);
+      resetRoom(
+        Sites.of(currentPlayRoom.value.platform!),
+        currentPlayRoom.value.roomId!,
+      );
     }
   }
 

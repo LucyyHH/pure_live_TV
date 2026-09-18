@@ -28,7 +28,10 @@ class FavoritePage extends GetView<FavoriteController> {
               AppStyle.hGap32,
               Text(
                 "我的关注",
-                style: AppStyle.titleStyleWhite.copyWith(fontSize: 36.w, fontWeight: FontWeight.bold),
+                style: AppStyle.titleStyleWhite.copyWith(
+                  fontSize: 36.w,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               AppStyle.hGap24,
               const Spacer(),
@@ -40,7 +43,10 @@ class FavoritePage extends GetView<FavoriteController> {
                       SizedBox(
                         width: 48.w,
                         height: 48.w,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 4.w),
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 4.w,
+                        ),
                       ),
                       AppStyle.hGap16,
                       Text("正在更新...", style: AppStyle.textStyleWhite),
@@ -84,34 +90,32 @@ class FavoritePage extends GetView<FavoriteController> {
           ),
           AppStyle.vGap48,
           Expanded(
-            child: Obx(
-              () => MasonryGridView.count(
+            child: Obx(() {
+              final rooms = controller.tabBottomIndex.value == 0
+                  ? controller.onlineRooms
+                  : controller.offlineRooms;
+              final dense = controller.settings.enableDenseFavorites.value;
+
+              return MasonryGridView.count(
                 padding: AppStyle.edgeInsetsH48,
-                itemCount: controller.tabBottomIndex.value == 0
-                    ? controller.onlineRooms.length
-                    : controller.offlineRooms.length,
+                itemCount: rooms.length,
                 crossAxisCount: 5,
                 crossAxisSpacing: 24.w,
                 mainAxisSpacing: 20.w,
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
                 itemBuilder: (_, i) {
-                  var item = controller.tabBottomIndex.value == 0
-                      ? controller.onlineRooms[i]
-                      : controller.offlineRooms[i];
+                  final item = rooms[i];
                   return RoomCard(
+                    key: ValueKey('${item.platform}-${item.roomId}'),
                     focusNode: item.focusNode,
                     room: item,
                     useDefaultLongTapEvent: false,
-                    dense: controller.settings.enableDenseFavorites.value,
+                    dense: dense,
                     roomTypePage: EnterRoomTypePage.favoritePage,
-                    onLongTap: () {
-                      controller.handleFollowLongTap(item);
-                    },
+                    onLongTap: () => controller.handleFollowLongTap(item),
                   );
                 },
-              ),
-            ),
+              );
+            }),
           ),
         ],
       ),

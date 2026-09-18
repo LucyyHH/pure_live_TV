@@ -69,11 +69,19 @@ class VideoController with ChangeNotifier {
   Timer? doubleClickTimer;
   late ScrollController scrollController;
   StreamSubscription<PlayerException>? _errorSub;
+  final List<StreamSubscription> _rxSubscriptions = [];
+  Worker? _selectedShieldWorker;
+  bool _destroyed = false;
 
   // ==================== 焦点管理 ====================
   final AppFocusNode focusNode = AppFocusNode();
   final AppFocusNode danmukuFocusNode = AppFocusNode();
+  final AppFocusNode panelPassiveFocusNode = AppFocusNode();
+  final Map<String, AppFocusNode> _panelFocusNodes = {};
   final GlobalKey danmuKey = GlobalKey();
+
+  AppFocusNode panelFocusNode(String key) =>
+      _panelFocusNodes.putIfAbsent(key, AppFocusNode.new);
 
   // ==================== 临时变量 ====================
   double initBrightness = 0.0;
@@ -128,7 +136,7 @@ class VideoController with ChangeNotifier {
 
     _startUnifiedServer();
 
-    ever(selectedShieldIndex, (int index) {
+    _selectedShieldWorker = ever(selectedShieldIndex, (int index) {
       _scrollToIndex(index);
     });
   }
@@ -166,79 +174,67 @@ class VideoController with ChangeNotifier {
 
   /// 初始化事件监听
   void _initListeners() {
-    // 控制器显示状态监听
-    showController.listen((show) {
-      if (show) showChangeNameFlag.value = false;
-    });
-
-    // 画质面板监听
-    showQualityPanel.listen((show) {
-      if (show) {
-        // 直接调用扩展方法
-        hideAllPanelsExcept(PanelType.quality);
-      } else {
-        disableController();
-      }
-    });
-    showLinePanel.listen((show) {
-      if (show) {
-        // 直接调用扩展方法
-        hideAllPanelsExcept(PanelType.lines);
-      } else {
-        disableController();
-      }
-    });
-
-    showQrCodePanel.listen((show) {
-      if (show) {
-        hideAllPanelsExcept(PanelType.qrCode);
-      } else {
-        disableController();
-      }
-    });
-
-    // 设置面板监听
-    showSettting.listen((show) {
-      if (show) {
-        // 直接调用扩展方法
-        hideAllPanelsExcept(PanelType.settings);
-      } else {
-        disableController();
-      }
-    });
-
-    // 播放列表面板监听
-    showPlayListPanel.listen((show) {
-      if (show) {
-        // 直接调用扩展方法
-        hideAllPanelsExcept(PanelType.playlist);
-        scrollToIndex(beforePlayNodeIndex.value);
-      } else {
-        beforePlayNodeIndex.value = settings.currentPlayListNodeIndex.value;
-        disableController();
-      }
-    });
-
-    // 播放列表索引监听
-    beforePlayNodeIndex.listen((index) {
-      if (showPlayListPanel.value) scrollToIndex(index);
-    });
-
-    // 底部按钮索引监听
-    currentNodeIndex.listen((index) {
-      currentBottomClickType.value = BottomButtonClickType.values[index];
-      log("currentBottomClickType: ${currentBottomClickType.value.toString()}");
-    });
-
-    // 弹幕设置索引监听
-    danmukuNodeIndex.listen((index) {
-      currentDanmakuClickType.value = DanmakuSettingClickType.values[index];
-    });
+    _rxSubscriptions.addAll([
+      showController.listen((show) {
+        if (show) showChangeNameFlag.value = false;
+      }),
+      showQualityPanel.listen((show) {
+        if (show) {
+          hideAllPanelsExcept(PanelType.quality);
+        } else {
+          disableController();
+        }
+      }),
+      showLinePanel.listen((show) {
+        if (show) {
+          hideAllPanelsExcept(PanelType.lines);
+        } else {
+          disableController();
+        }
+      }),
+      showQrCodePanel.listen((show) {
+        if (show) {
+          hideAllPanelsExcept(PanelType.qrCode);
+        } else {
+          disableController();
+        }
+      }),
+      showSettting.listen((show) {
+        if (show) {
+          hideAllPanelsExcept(PanelType.settings);
+        } else {
+          disableController();
+        }
+      }),
+      showPlayListPanel.listen((show) {
+        if (show) {
+          hideAllPanelsExcept(PanelType.playlist);
+          scrollToIndex(beforePlayNodeIndex.value);
+        } else {
+          beforePlayNodeIndex.value = settings.currentPlayListNodeIndex.value;
+          disableController();
+        }
+      }),
+      beforePlayNodeIndex.listen((index) {
+        if (showPlayListPanel.value) scrollToIndex(index);
+      }),
+      currentNodeIndex.listen((index) {
+        currentBottomClickType.value = BottomButtonClickType.values[index];
+        log("currentBottomClickType: ${currentBottomClickType.value}");
+      }),
+      danmukuNodeIndex.listen((index) {
+        currentDanmakuClickType.value = DanmakuSettingClickType.values[index];
+      }),
+    ]);
   }
 
   /// 初始化播放器
   void _initPlayer() {
-    GlobalPlayerService.instance.playerManager.play(datasource, playUrls, headers);
+    GlobalPlayerService.instance.playerManager.play(
+      datasource,
+      playUrls,
+      headers,
+    );
   }
 
   void initPlayerListener() {
@@ -331,14 +327,21 @@ class VideoController with ChangeNotifier {
   /// 刷新播放
   Future<void> refresh() async {
     await _errorSub?.cancel();
-    _handlePlayerReload(() => livePlayController.onInitPlayerState(reloadDataType: ReloadDataType.refreash));
+    _handlePlayerReload(
+      () => livePlayController.onInitPlayerState(
+        reloadDataType: ReloadDataType.refreash,
+      ),
+    );
   }
 
   /// 切换播放线路
   Future<void> changeLine(int index) async {
     await _errorSub?.cancel();
     _handlePlayerReload(
-      () => livePlayController.onInitPlayerState(reloadDataType: ReloadDataType.changeLine, line: index),
+      () => livePlayController.onInitPlayerState(
+        reloadDataType: ReloadDataType.changeLine,
+        line: index,
+      ),
     );
     showLinePanel.value = false;
   }
@@ -370,18 +373,31 @@ class VideoController with ChangeNotifier {
   }
 
   // 这里的 port 默认为 8888
-  void _startUnifiedServer({int port = 8888}) async {
+  Future<void> _startUnifiedServer({int port = 8888}) async {
     try {
-      final interfaces = await NetworkInterface.list(type: InternetAddressType.IPv4);
+      final interfaces = await NetworkInterface.list(
+        type: InternetAddressType.IPv4,
+      );
       // 增加安全判断，防止网络未连接时崩溃
       if (interfaces.isEmpty) {
         debugPrint("No network interfaces found");
         return;
       }
-      final ip = interfaces.firstWhere((i) => !i.name.contains('lo')).addresses.first.address;
+      final ip = interfaces
+          .firstWhere((i) => !i.name.contains('lo'))
+          .addresses
+          .first
+          .address;
+
+      if (_destroyed) return;
 
       // 尝试绑定端口
-      _server = await HttpServer.bind(InternetAddress.anyIPv4, port);
+      final server = await HttpServer.bind(InternetAddress.anyIPv4, port);
+      if (_destroyed) {
+        await server.close(force: true);
+        return;
+      }
+      _server = server;
 
       // 成功绑定后更新 URL
       fullServerUrl.value = "http://$ip:$port";
@@ -393,8 +409,13 @@ class VideoController with ChangeNotifier {
           WebSocket socket = await WebSocketTransformer.upgrade(request);
           _clients.add(socket);
           // Send initial list to phone
-          socket.add(jsonEncode({"type": "init", "data": settings.shieldList.value}));
-          socket.listen((msg) => _handleWsMessage(msg), onDone: () => _clients.remove(socket));
+          socket.add(
+            jsonEncode({"type": "init", "data": settings.shieldList.value}),
+          );
+          socket.listen(
+            (msg) => _handleWsMessage(msg),
+            onDone: () => _clients.remove(socket),
+          );
           return;
         }
 
@@ -410,17 +431,17 @@ class VideoController with ChangeNotifier {
       // 如果是端口占用错误，递归尝试 port + 1
       if (e.toString().contains("Address already in use")) {
         debugPrint("Port $port is in use, trying ${port + 1}...");
-        _startUnifiedServer(port: port + 1);
+        await _startUnifiedServer(port: port + 1);
       } else {
         debugPrint("Server Error: $e");
       }
     }
   }
 
-  void stopServer() async {
+  Future<void> stopServer() async {
     try {
       // 1. Close all active WebSocket clients first
-      for (var client in _clients) {
+      for (final client in List<WebSocket>.from(_clients)) {
         await client.close(WebSocketStatus.goingAway, "Server shutting down");
       }
       _clients.clear();
@@ -666,7 +687,8 @@ class VideoController with ChangeNotifier {
   }
 
   /// 播放/暂停切换
-  void togglePlayPause() => GlobalPlayerService.instance.playerManager.togglePlayPause();
+  void togglePlayPause() =>
+      GlobalPlayerService.instance.playerManager.togglePlayPause();
 
   /// 上一个频道
   void prevPlayChannel() => _switchChannel(livePlayController.prevChannel);
@@ -698,9 +720,9 @@ class VideoController with ChangeNotifier {
   }
 
   /// 切换频道通用逻辑
-  void _switchChannel(VoidCallback switchAction) async {
+  Future<void> _switchChannel(VoidCallback switchAction) async {
     await _errorSub?.cancel();
-    GlobalPlayerService.instance.playerManager.close();
+    await GlobalPlayerService.instance.playerManager.close();
     isLoading.value = true;
     _resetNameTimer();
     switchAction();
@@ -755,18 +777,29 @@ class VideoController with ChangeNotifier {
   // ==================== 资源释放 ====================
   /// 销毁控制器资源
   Future<void> destroy() async {
+    if (_destroyed) return;
+    _destroyed = true;
+
     // 取消焦点
     cancelFocus();
     cancelDanmakuFocus();
-    stopServer();
+    await stopServer();
     livePlayController.liveDanmaku.stop();
     // 重置播放状态
     livePlayController.success.value = false;
 
     // 取消订阅
     await _errorSub?.cancel();
+    _errorSub = null;
+    for (final subscription in _rxSubscriptions) {
+      await subscription.cancel();
+    }
+    _rxSubscriptions.clear();
+    _selectedShieldWorker?.dispose();
+    _selectedShieldWorker = null;
+
     // 停止播放器
-    GlobalPlayerService.instance.playerManager.close();
+    await GlobalPlayerService.instance.playerManager.close();
 
     // 取消所有定时器
     showControllerTimer?.cancel();
@@ -775,12 +808,18 @@ class VideoController with ChangeNotifier {
 
     // 释放滚动控制器
     scrollController.dispose();
+    shieldScrollController.dispose();
+    panelPassiveFocusNode.dispose();
+    for (final node in _panelFocusNodes.values) {
+      node.dispose();
+    }
+    _panelFocusNodes.clear();
   }
 
   /// 生命周期释放
   @override
-  void dispose() async {
-    await destroy();
+  void dispose() {
+    unawaited(destroy());
     super.dispose();
   }
 }

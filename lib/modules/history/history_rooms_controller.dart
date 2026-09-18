@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:pure_live/get/get.dart';
 import 'package:pure_live/plugins/utils.dart';
 import 'package:pure_live/app/app_focus_node.dart';
@@ -8,21 +9,30 @@ class HistoryPageController extends BasePageController<LiveRoom> {
   var currentNodeIndex = 1.obs;
   // button列表再加上设置最近观看
   List<AppFocusNode> focusNodes = [];
+  StreamSubscription<List<LiveRoom>>? _roomsSubscription;
 
   @override
   void onInit() {
-    refreshData();
     super.onInit();
     stopLoadMore.value = false;
-    list.addListener(() {
-      if (list.isNotEmpty) {
-        // 直播间
-        focusNodes = [];
-        for (var i = 0; i < list.length; i++) {
-          focusNodes.add(AppFocusNode());
-        }
-      }
-    });
+    _roomsSubscription = list.listen(_syncFocusNodes);
+    refreshData();
+  }
+
+  void _syncFocusNodes(List<LiveRoom> rooms) {
+    for (final node in focusNodes) {
+      node.dispose();
+    }
+    focusNodes = List.generate(rooms.length, (_) => AppFocusNode());
+  }
+
+  @override
+  void onClose() {
+    _roomsSubscription?.cancel();
+    for (final node in focusNodes) {
+      node.dispose();
+    }
+    super.onClose();
   }
 
   void clean() async {

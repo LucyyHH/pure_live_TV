@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:flutter/widgets.dart';
 import 'package:pure_live/get/get.dart';
 import 'package:pure_live/core/sites.dart';
 import 'package:pure_live/app/app_focus_node.dart';
@@ -11,22 +13,30 @@ class AreaRoomsController extends BasePageController<LiveRoom> {
   var currentNodeIndex = 1.obs;
   // button列表再加上设置最近观看
   List<AppFocusNode> focusNodes = [];
-  List<AppFocusNode> focusCateGoryNodes = [];
+  StreamSubscription<List<LiveRoom>>? _roomsSubscription;
   AreaRoomsController({required this.site, required this.subCategory});
 
   @override
   void onInit() {
-    refreshData();
     super.onInit();
-    list.addListener(() {
-      if (list.isNotEmpty) {
-        // 直播间
-        focusCateGoryNodes = [];
-        for (var i = 0; i < list.length; i++) {
-          focusCateGoryNodes.add(AppFocusNode());
+    _roomsSubscription = list.listen((rooms) {
+      if (currentPage != 2 || rooms.isEmpty) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!isClosed && list.isNotEmpty) {
+          list.first.focusNode.requestFocus();
         }
-      }
+      });
     });
+    refreshData();
+  }
+
+  @override
+  void onClose() {
+    _roomsSubscription?.cancel();
+    for (final node in focusNodes) {
+      node.dispose();
+    }
+    super.onClose();
   }
 
   @override

@@ -4,20 +4,35 @@ import 'package:pure_live/plugins/emoji_manager.dart';
 import 'package:pure_live/pkg/canvas_danmaku/models/danmaku_content_item.dart';
 
 class Utils {
-  static final Paint _emojiPaint = Paint()..filterQuality = FilterQuality.medium;
+  static final Paint _emojiPaint = Paint()
+    ..filterQuality = FilterQuality.medium;
   static final List<FontWeight> _fontWeights = FontWeight.values;
 
   // 统一缓存整条弹幕的完整排版结构
   static final Map<String, _CachedParagraph> _paragraphCache = {};
   static const int _maxCacheSize = 300;
 
-  static String _getParagraphKey(DanmakuContentItem content, double fontSize, int fontWeight, bool showStroke) {
+  static String _getParagraphKey(
+    DanmakuContentItem content,
+    double fontSize,
+    int fontWeight,
+    bool showStroke,
+  ) {
     return '${content.text}|$fontSize|$fontWeight|${content.color.toARGB32()}|$showStroke|${content.fontFamily ?? ""}';
   }
 
-  static void _checkAndTrimCache() {
+  static _CachedParagraph? _getCachedParagraph(String key) {
+    final cached = _paragraphCache.remove(key);
+    if (cached != null) {
+      _paragraphCache[key] = cached;
+    }
+    return cached;
+  }
+
+  static void _cacheParagraph(String key, _CachedParagraph paragraph) {
+    _paragraphCache[key] = paragraph;
     if (_paragraphCache.length > _maxCacheSize) {
-      _paragraphCache.clear();
+      _paragraphCache.remove(_paragraphCache.keys.first);
     }
   }
 
@@ -28,13 +43,12 @@ class Utils {
     double fontSize,
     int fontWeight,
   ) {
-    _checkAndTrimCache();
     final key = _getParagraphKey(content, fontSize, fontWeight, false);
-    var cached = _paragraphCache[key];
+    var cached = _getCachedParagraph(key);
 
     if (cached == null) {
       cached = _buildParagraph(content, fontSize, fontWeight, false);
-      _paragraphCache[key] = cached;
+      _cacheParagraph(key, cached);
     }
     return cached.mainParagraph;
   }
@@ -46,13 +60,12 @@ class Utils {
     double fontSize,
     int fontWeight,
   ) {
-    _checkAndTrimCache();
     final key = _getParagraphKey(content, fontSize, fontWeight, true);
-    var cached = _paragraphCache[key];
+    var cached = _getCachedParagraph(key);
 
     if (cached == null) {
       cached = _buildParagraph(content, fontSize, fontWeight, true);
-      _paragraphCache[key] = cached;
+      _cacheParagraph(key, cached);
     }
     return cached.strokeParagraph ?? cached.mainParagraph;
   }
@@ -65,11 +78,11 @@ class Utils {
     bool showStroke,
   ) {
     final key = _getParagraphKey(content, fontSize, fontWeight, showStroke);
-    var cached = _paragraphCache[key];
+    var cached = _getCachedParagraph(key);
 
     if (cached == null) {
       cached = _buildParagraph(content, fontSize, fontWeight, showStroke);
-      _paragraphCache[key] = cached;
+      _cacheParagraph(key, cached);
     }
     return cached.width;
   }
@@ -85,14 +98,12 @@ class Utils {
     bool selfSend,
     Paint? selfSendPaint,
   ) {
-    _checkAndTrimCache();
-
     final key = _getParagraphKey(content, fontSize, fontWeight, showStroke);
-    var cached = _paragraphCache[key];
+    var cached = _getCachedParagraph(key);
 
     if (cached == null) {
       cached = _buildParagraph(content, fontSize, fontWeight, showStroke);
-      _paragraphCache[key] = cached;
+      _cacheParagraph(key, cached);
     }
 
     final double currentX = offset.dx;
@@ -101,7 +112,10 @@ class Utils {
 
     // 绘制“自己发送”的弹幕背景框
     if (selfSend && selfSendPaint != null) {
-      canvas.drawRect(Rect.fromLTWH(currentX, baseY, cached.width, cached.height), selfSendPaint);
+      canvas.drawRect(
+        Rect.fromLTWH(currentX, baseY, cached.width, cached.height),
+        selfSendPaint,
+      );
     }
 
     // 先画描边（如果有）
@@ -113,15 +127,22 @@ class Utils {
     canvas.drawParagraph(cached.mainParagraph, drawOffset);
 
     // 提取并绘制表情
-    final List<ui.TextBox> inlineBoxes = cached.mainParagraph.getBoxesForPlaceholders();
-
-    for (int i = 0; i < inlineBoxes.length && i < cached.emojiKeys.length; i++) {
+    for (
+      int i = 0;
+      i < cached.inlineBoxes.length && i < cached.emojiKeys.length;
+      i++
+    ) {
       final emojiKey = cached.emojiKeys[i];
       final image = EmojiManager.getEmoji(emojiKey);
 
       if (image != null) {
-        final box = inlineBoxes[i];
-        final dstRect = Rect.fromLTWH(currentX + box.left, baseY + box.top, cached.emojiSize, cached.emojiSize);
+        final box = cached.inlineBoxes[i];
+        final dstRect = Rect.fromLTWH(
+          currentX + box.left,
+          baseY + box.top,
+          cached.emojiSize,
+          cached.emojiSize,
+        );
 
         canvas.drawImageRect(
           image,
@@ -140,10 +161,15 @@ class Utils {
     int fontWeight,
     bool showStroke,
   ) {
-    final targetFontWeight = _fontWeights[fontWeight < _fontWeights.length ? fontWeight : 4];
+    final targetFontWeight =
+        _fontWeights[fontWeight < _fontWeights.length ? fontWeight : 4];
     final double emojiSize = fontSize * 1.2;
 
-    final paragraphStyle = ui.ParagraphStyle(textAlign: TextAlign.left, textDirection: TextDirection.ltr, maxLines: 1);
+    final paragraphStyle = ui.ParagraphStyle(
+      textAlign: TextAlign.left,
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    );
 
     // 构建文字层
     final mainBuilder = ui.ParagraphBuilder(paragraphStyle);
@@ -162,7 +188,11 @@ class Utils {
         mainBuilder.addText(item.value);
         mainBuilder.pop();
       } else {
-        mainBuilder.addPlaceholder(emojiSize, emojiSize, ui.PlaceholderAlignment.middle);
+        mainBuilder.addPlaceholder(
+          emojiSize,
+          emojiSize,
+          ui.PlaceholderAlignment.middle,
+        );
         embeddedEmojis.add(item.value);
       }
     }
@@ -189,11 +219,17 @@ class Utils {
           strokeBuilder.addText(item.value);
           strokeBuilder.pop();
         } else {
-          strokeBuilder.addPlaceholder(emojiSize, emojiSize, ui.PlaceholderAlignment.middle);
+          strokeBuilder.addPlaceholder(
+            emojiSize,
+            emojiSize,
+            ui.PlaceholderAlignment.middle,
+          );
         }
       }
       strokeParagraph = strokeBuilder.build();
-      strokeParagraph.layout(const ui.ParagraphConstraints(width: double.infinity));
+      strokeParagraph.layout(
+        const ui.ParagraphConstraints(width: double.infinity),
+      );
     }
 
     return _CachedParagraph(
@@ -202,6 +238,7 @@ class Utils {
       width: mainParagraph.longestLine,
       height: mainParagraph.height,
       emojiKeys: embeddedEmojis,
+      inlineBoxes: mainParagraph.getBoxesForPlaceholders(),
       emojiSize: emojiSize,
     );
   }
@@ -217,6 +254,7 @@ class _CachedParagraph {
   final double width;
   final double height;
   final List<String> emojiKeys;
+  final List<ui.TextBox> inlineBoxes;
   final double emojiSize;
 
   _CachedParagraph({
@@ -225,6 +263,7 @@ class _CachedParagraph {
     required this.width,
     required this.height,
     required this.emojiKeys,
+    required this.inlineBoxes,
     required this.emojiSize,
   });
 }

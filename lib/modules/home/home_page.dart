@@ -82,7 +82,12 @@ class HomePage extends GetView<HomeController> {
               Text("纯粹直播", style: AppStyle.titleStyleWhite),
               AppStyle.hGap24,
               const Spacer(),
-              Obx(() => Text(controller.datetime.value, style: AppStyle.titleStyleWhite.copyWith(fontSize: 36.w))),
+              Obx(
+                () => Text(
+                  controller.datetime.value,
+                  style: AppStyle.titleStyleWhite.copyWith(fontSize: 36.w),
+                ),
+              ),
               AppStyle.hGap32,
               HighlightButton(
                 focusNode: controller.focusNodes.first,
@@ -126,112 +131,137 @@ class HomePage extends GetView<HomeController> {
             ],
           ),
           Expanded(
-            child: ListView(
-              padding: AppStyle.edgeInsetsV32,
-              children: [
-                Padding(
-                  padding: AppStyle.edgeInsetsH48,
-                  child: SizedBox(
-                    height: 200.h,
-                    child: ListView(
-                      controller: controller.listScrollController,
-                      scrollDirection: Axis.horizontal,
-                      children: [
-                        Row(
+            child: CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: AppStyle.edgeInsetsH48 + AppStyle.edgeInsetsV32,
+                  sliver: SliverToBoxAdapter(
+                    child: SizedBox(
+                      height: 200.h,
+                      child: SingleChildScrollView(
+                        controller: controller.mainMenuScrollController,
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [const SizedBox(width: 5), buildViews(context), const SizedBox(width: 5)],
+                          children: [
+                            const SizedBox(width: 5),
+                            buildViews(context),
+                            const SizedBox(width: 5),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                SliverToBoxAdapter(child: AppStyle.vGap32),
+                SliverPadding(
+                  padding: AppStyle.edgeInsetsH48,
+                  sliver: SliverToBoxAdapter(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 64.w,
+                          height: 64.w,
+                          child: Center(
+                            child: Icon(
+                              Icons.history,
+                              color: Colors.white,
+                              size: 56.w,
+                            ),
+                          ),
+                        ),
+                        AppStyle.hGap24,
+                        Expanded(
+                          child: Text("最近观看", style: AppStyle.titleStyleWhite),
+                        ),
+                        Obx(
+                          () => Visibility(
+                            visible: controller.loadding.value,
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 48.w,
+                                  height: 48.w,
+                                  child: CircularProgressIndicator(
+                                    color: Colors.white,
+                                    strokeWidth: 4.w,
+                                  ),
+                                ),
+                                AppStyle.hGap16,
+                                Text("正在更新...", style: AppStyle.textStyleWhite),
+                              ],
+                            ),
+                          ),
+                        ),
+                        AppStyle.hGap32,
+                        HighlightButton(
+                          focusNode: controller.focusNodes.last,
+                          iconData: Icons.refresh,
+                          text: "刷新",
+                          onTap: () {
+                            controller.refreshData();
+                            controller.currentNodeIndex.value =
+                                controller.focusNodes.length - 1;
+                          },
                         ),
                       ],
                     ),
                   ),
                 ),
-                AppStyle.vGap32,
-                Padding(
-                  padding: AppStyle.edgeInsetsH48,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      SizedBox(
-                        width: 64.w,
-                        height: 64.w,
-                        child: Center(
-                          child: Icon(Icons.history, color: Colors.white, size: 56.w),
-                        ),
-                      ),
-                      AppStyle.hGap24,
-                      Expanded(child: Text("最近观看", style: AppStyle.titleStyleWhite)),
-                      Obx(
-                        () => Visibility(
-                          visible: controller.loadding.value,
-                          child: Row(
-                            children: [
-                              SizedBox(
-                                width: 48.w,
-                                height: 48.w,
-                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 4.w),
-                              ),
-                              AppStyle.hGap16,
-                              Text("正在更新...", style: AppStyle.textStyleWhite),
-                            ],
-                          ),
-                        ),
-                      ),
-                      AppStyle.hGap32,
-                      HighlightButton(
-                        focusNode: controller.focusNodes.last,
-                        iconData: Icons.refresh,
-                        text: "刷新",
-                        onTap: () {
-                          controller.refreshData();
-                          controller.currentNodeIndex.value = controller.focusNodes.length - 1;
-                        },
-                      ),
-                    ],
-                  ),
-                ),
                 Obx(
-                  () => MasonryGridView.count(
+                  () => SliverPadding(
                     padding: AppStyle.edgeInsetsA48,
-                    itemCount: controller.rooms.value.length,
-                    crossAxisCount: 5,
-                    crossAxisSpacing: 24.w,
-                    mainAxisSpacing: 20.w,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemBuilder: (_, i) {
-                      var item = controller.rooms.value[i];
-                      return RoomCard(
-                        room: item,
-                        dense: true,
-                        useDefaultLongTapEvent: false,
-                        roomTypePage: EnterRoomTypePage.homePage,
-                        onLongTap: () {
-                          controller.removeItem(item);
-                        },
-                        focusNode: controller.hisToryFocusNodes[i],
-                      );
-                    },
+                    sliver: SliverMasonryGrid.count(
+                      childCount: controller.rooms.length,
+                      crossAxisCount: 5,
+                      crossAxisSpacing: 24.w,
+                      mainAxisSpacing: 20.w,
+                      itemBuilder: (_, i) {
+                        final item = controller.rooms[i];
+                        return RoomCard(
+                          key: ValueKey('${item.platform}-${item.roomId}'),
+                          room: item,
+                          dense: true,
+                          useDefaultLongTapEvent: false,
+                          roomTypePage: EnterRoomTypePage.homePage,
+                          onLongTap: () => controller.removeItem(item),
+                          focusNode: controller.hisToryFocusNodes[i],
+                        );
+                      },
+                    ),
                   ),
                 ),
                 Obx(
-                  () => Visibility(
-                    visible: controller.rooms.isEmpty,
-                    child: Column(
-                      children: [
-                        AppStyle.vGap24,
-                        LottieBuilder.asset('assets/lotties/empty.json', width: 160.w, height: 160.w, repeat: false),
-                        AppStyle.vGap24,
-                        Text("暂无任何历史记录\n您可以从其他端同步数据到此处", textAlign: TextAlign.center, style: AppStyle.textStyleWhite),
-                        AppStyle.vGap16,
-                        HighlightButton(
-                          focusNode: controller.syncNode,
-                          iconData: Icons.devices,
-                          text: "同步数据",
-                          onTap: () {
-                            controller.toSync();
-                          },
-                        ),
-                      ],
+                  () => SliverToBoxAdapter(
+                    child: Visibility(
+                      visible: controller.rooms.isEmpty,
+                      child: Column(
+                        children: [
+                          AppStyle.vGap24,
+                          LottieBuilder.asset(
+                            'assets/lotties/empty.json',
+                            width: 160.w,
+                            height: 160.w,
+                            repeat: false,
+                          ),
+                          AppStyle.vGap24,
+                          Text(
+                            "暂无任何历史记录\n您可以从其他端同步数据到此处",
+                            textAlign: TextAlign.center,
+                            style: AppStyle.textStyleWhite,
+                          ),
+                          AppStyle.vGap16,
+                          HighlightButton(
+                            focusNode: controller.syncNode,
+                            iconData: Icons.devices,
+                            text: "同步数据",
+                            onTap: () {
+                              controller.toSync();
+                            },
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -274,7 +304,11 @@ class HomePage extends GetView<HomeController> {
                     children: [
                       Padding(
                         padding: AppStyle.edgeInsetsR12,
-                        child: Icon(Icons.live_tv, size: 40.w, color: Colors.white),
+                        child: Icon(
+                          Icons.live_tv,
+                          size: 40.w,
+                          color: Colors.white,
+                        ),
                       ),
                       Text(
                         '直播间搜索',

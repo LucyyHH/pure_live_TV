@@ -30,7 +30,10 @@ class PopularPage extends GetView<PopularGridController> {
               AppStyle.hGap32,
               Text(
                 "热门直播",
-                style: AppStyle.titleStyleWhite.copyWith(fontSize: 36.w, fontWeight: FontWeight.bold),
+                style: AppStyle.titleStyleWhite.copyWith(
+                  fontSize: 36.w,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               AppStyle.hGap24,
               const Spacer(),
@@ -42,7 +45,10 @@ class PopularPage extends GetView<PopularGridController> {
                       SizedBox(
                         width: 48.w,
                         height: 48.w,
-                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 4.w),
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 4.w,
+                        ),
                       ),
                       AppStyle.hGap16,
                       Text("正在更新...", style: AppStyle.textStyleWhite),
@@ -70,9 +76,15 @@ class PopularPage extends GetView<PopularGridController> {
               Sites().availableSites().length,
               (index) => Obx(
                 () => HighlightButton(
-                  icon: Image.asset(Sites().availableSites()[index].logo, width: 48.w, height: 48.w),
+                  icon: Image.asset(
+                    Sites().availableSites()[index].logo,
+                    width: 48.w,
+                    height: 48.w,
+                  ),
                   text: Sites().availableSites()[index].name,
-                  selected: controller.siteId.value == Sites().availableSites()[index].id,
+                  selected:
+                      controller.siteId.value ==
+                      Sites().availableSites()[index].id,
                   focusNode: controller.focusNodes[index + 1],
                   onTap: () {
                     controller.setSite(Sites().availableSites()[index].id);
@@ -93,15 +105,9 @@ class PopularPage extends GetView<PopularGridController> {
                       mainAxisSpacing: 48.w,
                       controller: controller.scrollController,
                       itemBuilder: (_, i) {
-                        var item = controller.list[i];
-                        if (i == 0) {
-                          Future.delayed(Duration.zero, () {
-                            if (controller.currentPage == 2) {
-                              item.focusNode.requestFocus();
-                            }
-                          });
-                        }
+                        final item = controller.list[i];
                         return RoomCard(
+                          key: ValueKey('${item.platform}-${item.roomId}'),
                           room: item,
                           dense: true,
                           focusNode: item.focusNode,
@@ -113,9 +119,18 @@ class PopularPage extends GetView<PopularGridController> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          LottieBuilder.asset('assets/lotties/empty.json', width: 160.w, height: 160.w, repeat: false),
+                          LottieBuilder.asset(
+                            'assets/lotties/empty.json',
+                            width: 160.w,
+                            height: 160.w,
+                            repeat: false,
+                          ),
                           AppStyle.vGap24,
-                          Text("暂无热门直播\n请打开设置展示平台", textAlign: TextAlign.center, style: AppStyle.textStyleWhite),
+                          Text(
+                            "暂无热门直播\n请打开设置展示平台",
+                            textAlign: TextAlign.center,
+                            style: AppStyle.textStyleWhite,
+                          ),
                         ],
                       ),
                     ),

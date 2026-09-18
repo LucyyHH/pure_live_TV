@@ -29,12 +29,6 @@ class HighlightButton extends StatelessWidget {
   });
   @override
   Widget build(BuildContext context) {
-    if (useFocus) {
-      focusNode.isFoucsed.listen((hasFocus) {
-        onFocusChange?.call(hasFocus);
-      });
-    }
-
     return useFocus
         ? Obx(
             () => HighlightWidget(
@@ -43,6 +37,7 @@ class HighlightButton extends StatelessWidget {
               color: Colors.white10,
               onTap: onTap,
               autofocus: autofocus,
+              onFocusChange: onFocusChange,
               selected: selected,
               useFocus: useFocus,
               child: Container(
@@ -59,7 +54,9 @@ class HighlightButton extends StatelessWidget {
                       text,
                       style: TextStyle(
                         fontSize: 28.w,
-                        color: (focusNode.isFoucsed.value || selected ? Colors.black : Colors.white),
+                        color: (focusNode.isFoucsed.value || selected
+                            ? Colors.black
+                            : Colors.white),
                       ),
                     ),
                   ],
@@ -73,6 +70,7 @@ class HighlightButton extends StatelessWidget {
             color: Colors.white10,
             onTap: onTap,
             autofocus: autofocus,
+            onFocusChange: onFocusChange,
             selected: selected,
             useFocus: useFocus,
             child: Container(
@@ -87,7 +85,10 @@ class HighlightButton extends StatelessWidget {
                   buildIcon(),
                   Text(
                     text,
-                    style: TextStyle(fontSize: 28.w, color: selected ? Colors.black : Colors.white),
+                    style: TextStyle(
+                      fontSize: 28.w,
+                      color: selected ? Colors.black : Colors.white,
+                    ),
                   ),
                 ],
               ),
@@ -105,12 +106,20 @@ class HighlightButton extends StatelessWidget {
                   Icon(
                     iconData,
                     size: 40.w,
-                    color: (focusNode.isFoucsed.value || selected) ? Colors.black : Colors.white,
+                    color: (focusNode.isFoucsed.value || selected)
+                        ? Colors.black
+                        : Colors.white,
                   ),
             )
           : Padding(
               padding: AppStyle.edgeInsetsR12,
-              child: icon ?? Icon(iconData, size: 40.w, color: selected ? Colors.black : Colors.white),
+              child:
+                  icon ??
+                  Icon(
+                    iconData,
+                    size: 40.w,
+                    color: selected ? Colors.black : Colors.white,
+                  ),
             );
     }
     return const SizedBox();

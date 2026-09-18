@@ -18,7 +18,9 @@ jobs:
       contents: write
     strategy:
       matrix:
-        branch: [main, without-exo]
+        branch: [main_opt]
+      # 一个分支失败时不要取消其它分支，否则该分支已构建好的 APK 不会被上传
+      fail-fast: false
     
     steps:
       - name: 签出代码
@@ -59,22 +61,18 @@ jobs:
       - name: 打包APK
         run: flutter build apk --release --split-per-abi --target-platform android-arm,android-arm64,android-x64 --android-skip-build-dependency-validation
       
-      - name: 重命名 APK 文件
-        run: |
-          cd build/app/outputs/flutter-apk/
-          if [ "${{ matrix.branch }}" = "without-exo" ]; then
-            for f in app-*-release.apk; do
-              mv "$f" "${f%-release.apk}-without-exo.apk"
-            done
-          fi
-
       - name: 读取版本信息
         id: version
         uses: juliangruber/read-file-action@v1
         with:
           path: assets/version.json
 
-      - name: 上传至Release
+      # 只负责创建 Release，且必须保持草稿状态。
+      # softprops 在 input_draft != true 时会调用 finalizeRelease，把刚创建的 Release 立即改成
+      # draft:false；而此时一个 APK 都还没上传，正是「已发布却下载不到 APK」这个故障的成因。
+      # 设 draft:true 可让 finalizeRelease 提前返回；正式发布改由下方独立的 publish 作业负责。
+      # 不使用 files: 上传；改由下方单独步骤串行上传，以便对 5xx 做重试并校验结果。
+      - name: 创建Release（草稿）
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag_name || github.ref_name }}
@@ -84,15 +82,161 @@ jobs:
             本次更新内容：
             ${{ fromJson(steps.version.outputs.content).version_desc }}
             📺 版本说明：
-            • 标准版：包含完整播放器内核 (来自 main 分支)
-            • 精简版：不含 Exo 内核，文件名带 -without-exo (来自 without-exo 分支)
+            • 包含完整播放器内核
             
             本软件为开源项目,无广告，无病毒，若安装时出现病毒误报，可自行斟酌。
           prerelease: false
-          files: build/app/outputs/flutter-apk/app-*.apk
+          draft: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # GitHub 的 assets 上传接口偶发返回 5xx（"Unicorn!" HTML 页面）。
+      # softprops/action-gh-release 不重试上传错误，且并发上传多个约 50MB 的 APK
+      # 时更容易触发，因此这里改为串行 + 显式重试。
+      - name: 上传APK到Release（失败自动重试）
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag_name || github.ref_name }}
+          # 经 env 传入而不是直接插值进脚本，避免矩阵值被当作 shell 代码执行。
+          BRANCH: ${{ matrix.branch }}
+        run: |
+          set -euo pipefail
+          # 显式校验矩阵分支：未知分支直接失败，避免 --clobber 用错误的文件名
+          # 覆盖掉其它分支已经上传好的真实 APK。
+          case "$BRANCH" in
+            main_opt) SUFFIX="release" ;;
+            *)
+              echo "::error::未知的矩阵分支 '$BRANCH'，无法确定 APK 文件名"
+              exit 1
+              ;;
+          esac
+          files=()
+          for abi in arm64-v8a armeabi-v7a x86_64; do
+            f="build/app/outputs/flutter-apk/app-${abi}-${SUFFIX}.apk"
+            if [ ! -f "$f" ]; then
+              echo "::error::未找到构建产物 $f"
+              exit 1
+            fi
+            files+=("$f")
+          done
+          for f in "${files[@]}"; do
+            echo "📦 准备上传 $(basename "$f") ($(du -h "$f" | cut -f1))"
+            ok=0
+            for attempt in 1 2 3 4 5; do
+              if gh release upload "$TAG" "$f" --clobber --repo "$GITHUB_REPOSITORY"; then
+                ok=1
+                break
+              fi
+              echo "::warning::第 $attempt 次上传 $(basename "$f") 失败"
+              if [ "$attempt" -lt 5 ]; then
+                backoff=$((attempt * 15))
+                echo "等待 ${backoff}s 后重试..."
+                sleep "$backoff"
+              fi
+            done
+            if [ "$ok" -ne 1 ]; then
+              echo "::error::$(basename "$f") 连续 5 次上传失败"
+              exit 1
+            fi
+          done
 
       - name: 输出任务状态
         if: always()
         run: echo "🍏 Branch ${{ matrix.branch }} build status is ${{ job.status }}."
+
+  # 发布单独放在一个作业里，而不是在矩阵作业里各跑一遍：
+  #   1) 所有 APK 齐不齐是全局条件，只需判断一次；
+  #   2) 避免多个作业同时执行 gh release edit --draft=false（check-then-act 竞态）。
+  # 用 always() 让它即使上游失败也运行：这样才能对「已发布但资产为空」发出真实告警。
+  publish:
+    needs: build-android
+    # always()：上游失败时也要跑，否则「已发布但缺资产」这类故障会被跳过而显示绿色。
+    # !cancelled()：整个 run 被手动取消时没必要再跑，避免取消场景下的无意义报错。
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: 校验APK并发布Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.inputs.tag_name || github.ref_name }}
+        run: |
+          set -euo pipefail
+          expected=(
+            app-arm64-v8a-release.apk
+            app-armeabi-v7a-release.apk
+            app-x86_64-release.apk
+          )
+          # 先确认 Release 是否存在：若构建在创建 Release 之前就失败，这里能给出明确诊断，
+          # 而不是让下面的轮询空转 5 分钟再报一句含糊的「读取状态失败」。
+          # 只在明确识别为 404/release not found 时才判定不存在，避免把 API 瞬时故障误判。
+          if ! view_err="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft 2>&1 >/dev/null)"; then
+            if printf '%s' "$view_err" | grep -qiE 'release not found|HTTP 404|not found'; then
+              echo "::error::Release $TAG 不存在（构建很可能在创建 Release 之前就失败了）。请检查 build-android 作业的日志。"
+              exit 1
+            fi
+            echo "::warning::预检未能确认 Release $TAG 是否存在（${view_err}），继续轮询..."
+          fi
+
+          # 读取状态必须区分「明确是草稿」与「读取失败」，否则 API 故障会被误判成已发布。
+          read_draft() {
+            local v
+            if ! v="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')"; then
+              return 1
+            fi
+            printf '%s' "$v"
+          }
+          fail_reads=0
+          # 预置 draft：它是标量，若循环体一次都没执行到底（每次都读取状态失败），
+          # set -u 下循环之后的 ${draft} 会直接以「未绑定的变量」崩溃。
+          # missing 是数组，${missing[*]} 对未赋值数组本就安全；这里一并预置只是
+          # 防御性写法，保证即使将来在循环外改用 ${#missing[@]} 也不会崩。
+          draft=""
+          missing=()
+          for i in $(seq 1 30); do
+            if ! draft="$(read_draft)"; then
+              fail_reads=$((fail_reads + 1))
+              echo "::warning::第 $i/30 次读取 Release 状态失败（连续 $fail_reads 次）"
+              if [ "$fail_reads" -ge 5 ]; then
+                echo "::error::连续 5 次无法读取 Release $TAG 的状态，判为失败"
+                exit 1
+              fi
+              sleep 10
+              continue
+            fi
+            fail_reads=0
+            if ! assets="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets')"; then
+              echo "::warning::第 $i/30 次读取资产列表失败"
+              sleep 10
+              continue
+            fi
+            missing=()
+            for name in "${expected[@]}"; do
+              if ! printf '%s' "$assets" | jq -e --arg n "$name" 'any(.[]; .name == $n and .state == "uploaded" and (.size > 0))' >/dev/null 2>&1; then
+                missing+=("$name")
+              fi
+            done
+            if [ "${#missing[@]}" -eq 0 ]; then
+              echo "✅ 3 个 APK 均已上传完成"
+              if [ "$draft" = "true" ]; then
+                gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false
+                echo "🚀 已发布 Release $TAG"
+              else
+                echo "ℹ️ Release 已是发布状态，无需再次发布"
+              fi
+              exit 0
+            fi
+            echo "⏳ 第 $i/30 次检查：仍缺少 ${#missing[@]} 个（${missing[*]}），10s 后重试..."
+            sleep 10
+          done
+          # 到这里说明 APK 始终没凑齐。这正是要修的故障：
+          # Release 已经对用户可见却下载不到 APK，必须让 CI 变红，而不是发个 warning 混过去。
+          if [ "$draft" = "true" ]; then
+            echo "::error::等待超时，仍缺少：${missing[*]}；Release 保持草稿状态，未对用户发布"
+          else
+            echo "::error::等待超时，仍缺少：${missing[*]}；但 Release 已是发布状态，用户当前下载不到这些 APK"
+          fi
+          exit 1

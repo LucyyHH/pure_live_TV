@@ -13,10 +13,21 @@ class HomeController extends BasePageController {
   var datetime = "00:00".obs;
   static final _formatter = DateFormat('yyyy年MM月dd日 HH:mm:ss', 'zh_CN');
   Timer? _timer;
-  static List<String> mainPageOptions = ["直播关注", "热门直播", "分区类别", "关注分区", '链接放映', "搜索直播", "观看记录"];
-  final NativeTextFieldController roomSearchController = NativeTextFieldController();
+  static List<String> mainPageOptions = [
+    "直播关注",
+    "热门直播",
+    "分区类别",
+    "关注分区",
+    '链接放映',
+    "搜索直播",
+    "观看记录",
+  ];
+  final NativeTextFieldController roomSearchController =
+      NativeTextFieldController();
   final searchFocusNode = FocusNode();
-  final ScrollController listScrollController = ScrollController();
+  final ScrollController mainMenuScrollController = ScrollController();
+  StreamSubscription<bool>? _firstMainButtonFocusSubscription;
+  StreamSubscription<bool>? _lastMainButtonFocusSubscription;
   final hasNewVersion = false.obs;
   static List<IconData> mainPageIconOptions = [
     Icons.favorite_border,
@@ -30,7 +41,10 @@ class HomeController extends BasePageController {
   var rooms = <LiveRoom>[].obs;
   var currentNodeIndex = 1.obs;
   // button列表再加上设置最近观看
-  List<AppFocusNode> focusNodes = List.generate(mainPageOptions.length + 2, (_) => AppFocusNode());
+  List<AppFocusNode> focusNodes = List.generate(
+    mainPageOptions.length + 2,
+    (_) => AppFocusNode(),
+  );
   List<AppFocusNode> hisToryFocusNodes = [];
   AppFocusNode versionFocusNode = AppFocusNode();
   final syncNode = AppFocusNode();
@@ -43,16 +57,28 @@ class HomeController extends BasePageController {
       focusNodeListener();
       hisToryFocusNodes = List.generate(rooms.length, (_) => AppFocusNode());
       refreshData();
-      focusNodes[1].isFoucsed.listen((p0) {
-        listScrollController.animateTo(0.0, duration: const Duration(milliseconds: 200), curve: Curves.linear);
+      _firstMainButtonFocusSubscription = focusNodes[1].isFoucsed.listen((
+        focused,
+      ) {
+        if (focused && mainMenuScrollController.hasClients) {
+          mainMenuScrollController.animateTo(
+            0.0,
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.linear,
+          );
+        }
       });
-      focusNodes[mainPageOptions.length].isFoucsed.listen((p0) {
-        listScrollController.animateTo(
-          listScrollController.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 200),
-          curve: Curves.linear,
-        );
-      });
+      _lastMainButtonFocusSubscription = focusNodes[mainPageOptions.length]
+          .isFoucsed
+          .listen((focused) {
+            if (focused && mainMenuScrollController.hasClients) {
+              mainMenuScrollController.animateTo(
+                mainMenuScrollController.position.maxScrollExtent,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.linear,
+              );
+            }
+          });
       checkNewVersion();
     });
 
@@ -97,14 +123,23 @@ class HomeController extends BasePageController {
   Future<List<LiveRoom>> getData(int page, int pageSize) async {
     List<Future<LiveRoom>> futures = [];
     var historyRooms = settingsService.historyRooms.value
-        .where((room) => room.liveStatus == LiveStatus.live && room.platform != Sites.iptvSite)
+        .where(
+          (room) =>
+              room.liveStatus == LiveStatus.live &&
+              room.platform != Sites.iptvSite,
+        )
         .take(8)
         .toList();
     if (historyRooms.isEmpty) {
       return [];
     }
     for (final room in historyRooms) {
-      futures.add(Sites.of(room.platform!).liveSite.getRoomDetail(roomId: room.roomId!, platform: room.platform!));
+      futures.add(
+        Sites.of(room.platform!).liveSite.getRoomDetail(
+          roomId: room.roomId!,
+          platform: room.platform!,
+        ),
+      );
     }
     try {
       final futuresRooms = await Future.wait(futures);
@@ -116,10 +151,17 @@ class HomeController extends BasePageController {
       return historyRooms;
     }
     historyRooms = settingsService.historyRooms.value
-        .where((room) => room.liveStatus == LiveStatus.live && room.platform != Sites.iptvSite)
+        .where(
+          (room) =>
+              room.liveStatus == LiveStatus.live &&
+              room.platform != Sites.iptvSite,
+        )
         .take(8)
         .toList();
     rooms.value = historyRooms;
+    for (final node in hisToryFocusNodes) {
+      node.dispose();
+    }
     hisToryFocusNodes = List.generate(rooms.length, (_) => AppFocusNode());
     return historyRooms;
   }
@@ -127,7 +169,19 @@ class HomeController extends BasePageController {
   @override
   void onClose() {
     _timer?.cancel();
-    _timer = null;
+    _firstMainButtonFocusSubscription?.cancel();
+    _lastMainButtonFocusSubscription?.cancel();
+    mainMenuScrollController.dispose();
+    roomSearchController.dispose();
+    searchFocusNode.dispose();
+    versionFocusNode.dispose();
+    syncNode.dispose();
+    for (final node in focusNodes) {
+      node.dispose();
+    }
+    for (final node in hisToryFocusNodes) {
+      node.dispose();
+    }
     super.onClose();
   }
 }

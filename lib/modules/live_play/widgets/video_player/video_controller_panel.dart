@@ -70,12 +70,21 @@ class ErrorWidget extends StatelessWidget {
         children: [
           Padding(
             padding: const EdgeInsets.all(8.0),
-            child: Text(S.of(context).play_video_failed, style: const TextStyle(color: Colors.white, fontSize: 16)),
+            child: Text(
+              S.of(context).play_video_failed,
+              style: const TextStyle(color: Colors.white, fontSize: 16),
+            ),
           ),
           ElevatedButton(
             onPressed: () => controller.refresh(),
-            style: ElevatedButton.styleFrom(elevation: 0, backgroundColor: Colors.white.withValues(alpha: 0.2)),
-            child: Text(S.of(context).retry, style: const TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(
+              elevation: 0,
+              backgroundColor: Colors.white.withValues(alpha: 0.2),
+            ),
+            child: Text(
+              S.of(context).retry,
+              style: const TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -85,7 +94,11 @@ class ErrorWidget extends StatelessWidget {
 
 // Top action bar widgets
 class TopActionBar extends StatelessWidget {
-  const TopActionBar({super.key, required this.controller, required this.barHeight});
+  const TopActionBar({
+    super.key,
+    required this.controller,
+    required this.barHeight,
+  });
 
   final VideoController controller;
   final double barHeight;
@@ -112,7 +125,11 @@ class TopActionBar extends StatelessWidget {
                   child: Text(
                     controller.room.title ?? '正在读取直播信息...',
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white, fontSize: 20, decoration: TextDecoration.none),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      decoration: TextDecoration.none,
+                    ),
                   ),
                 ),
               ),
@@ -163,7 +180,11 @@ class _DatetimeInfoState extends State<DatetimeInfo> {
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
       child: Text(
         '$hour:$minute',
-        style: const TextStyle(color: Colors.white, fontSize: 18, decoration: TextDecoration.none),
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 18,
+          decoration: TextDecoration.none,
+        ),
       ),
     );
   }
@@ -195,7 +216,11 @@ class DanmakuViewer extends StatelessWidget {
 
 // Bottom action bar widgets
 class BottomActionBar extends StatelessWidget {
-  const BottomActionBar({super.key, required this.controller, required this.barHeight});
+  const BottomActionBar({
+    super.key,
+    required this.controller,
+    required this.barHeight,
+  });
 
   final VideoController controller;
   final double barHeight;
@@ -254,9 +279,13 @@ class PlayPauseButton extends StatelessWidget {
           return Obx(
             () => HighlightIconButton(
               useFocus: false,
-              focusNode: AppFocusNode(),
-              selected: controller.currentBottomClickType.value == BottomButtonClickType.playPause,
-              iconData: isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+              focusNode: controller.panelPassiveFocusNode,
+              selected:
+                  controller.currentBottomClickType.value ==
+                  BottomButtonClickType.playPause,
+              iconData: isPlaying
+                  ? Icons.pause_rounded
+                  : Icons.play_arrow_rounded,
               onTap: () {
                 controller.togglePlayPause();
               },
@@ -281,8 +310,10 @@ class LineButton extends StatelessWidget {
       child: Obx(
         () => HighlightButton(
           useFocus: false,
-          focusNode: AppFocusNode(),
-          selected: controller.currentBottomClickType.value == BottomButtonClickType.changeLine,
+          focusNode: controller.panelPassiveFocusNode,
+          selected:
+              controller.currentBottomClickType.value ==
+              BottomButtonClickType.changeLine,
           iconData: Icons.density_small_rounded,
           onTap: () {
             // 点击弹出线路面板
@@ -308,8 +339,10 @@ class QualiteNameButton extends StatelessWidget {
       child: Obx(
         () => HighlightButton(
           useFocus: false,
-          focusNode: AppFocusNode(),
-          selected: controller.currentBottomClickType.value == BottomButtonClickType.qualityName,
+          focusNode: controller.panelPassiveFocusNode,
+          selected:
+              controller.currentBottomClickType.value ==
+              BottomButtonClickType.qualityName,
           iconData: Icons.swap_vertical_circle_outlined,
           onTap: () {
             controller.showChangeNameFlag.value = true;
@@ -335,8 +368,10 @@ class BoxFitButton extends StatelessWidget {
       child: Obx(
         () => HighlightButton(
           useFocus: false,
-          focusNode: AppFocusNode(),
-          selected: controller.currentBottomClickType.value == BottomButtonClickType.boxFit,
+          focusNode: controller.panelPassiveFocusNode,
+          selected:
+              controller.currentBottomClickType.value ==
+              BottomButtonClickType.boxFit,
           iconData: Icons.video_settings_outlined,
           onTap: () {
             controller.setVideoFit();
@@ -360,8 +395,10 @@ class ShieldButton extends StatelessWidget {
       child: Obx(
         () => HighlightButton(
           useFocus: false,
-          focusNode: AppFocusNode(),
-          selected: controller.currentBottomClickType.value == BottomButtonClickType.shieldSetting,
+          focusNode: controller.panelPassiveFocusNode,
+          selected:
+              controller.currentBottomClickType.value ==
+              BottomButtonClickType.shieldSetting,
           iconData: Icons.dynamic_feed_rounded,
           text: '弹幕过滤',
           onTap: () {
@@ -406,14 +443,19 @@ class ShieldPanel extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(16.w),
-                        boxShadow: [BoxShadow(color: Colors.black26, blurRadius: 10.w)],
+                        boxShadow: [
+                          BoxShadow(color: Colors.black26, blurRadius: 10.w),
+                        ],
                       ),
                       child: QrImageView(
                         data: controller.fullServerUrl.value,
                         version: QrVersions.auto,
                         size: 220.w,
                         padding: AppStyle.edgeInsetsA24,
-                        eyeStyle: const QrEyeStyle(color: Color(0xFF000000), eyeShape: QrEyeShape.square),
+                        eyeStyle: const QrEyeStyle(
+                          color: Color(0xFF000000),
+                          eyeShape: QrEyeShape.square,
+                        ),
                         dataModuleStyle: const QrDataModuleStyle(
                           color: Color(0xFF000000),
                           dataModuleShape: QrDataModuleShape.square,
@@ -431,16 +473,28 @@ class ShieldPanel extends StatelessWidget {
                     ),
                     AppStyle.vGap12,
                     Container(
-                      padding: EdgeInsets.symmetric(horizontal: 16.w, vertical: 8.h),
-                      decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(8.w)),
+                      padding: EdgeInsets.symmetric(
+                        horizontal: 16.w,
+                        vertical: 8.h,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black26,
+                        borderRadius: BorderRadius.circular(8.w),
+                      ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.link, color: Get.theme.primaryColor, size: 24.w),
+                          Icon(
+                            Icons.link,
+                            color: Get.theme.primaryColor,
+                            size: 24.w,
+                          ),
                           AppStyle.hGap8,
                           Obx(
                             () => Text(
-                              controller.fullServerUrl.value.isEmpty ? "正在启动服务..." : controller.fullServerUrl.value,
+                              controller.fullServerUrl.value.isEmpty
+                                  ? "正在启动服务..."
+                                  : controller.fullServerUrl.value,
                               style: TextStyle(
                                 color: Colors.white,
                                 fontSize: 28.sp,
@@ -468,19 +522,28 @@ class ShieldPanel extends StatelessWidget {
                     () => Wrap(
                       spacing: 12.w,
                       runSpacing: 12.h,
-                      children: controller.settings.shieldList.asMap().entries.map((entry) {
-                        final int index = entry.key;
-                        final String value = entry.value;
-                        final isSelected = controller.selectedShieldIndex.value == index;
-                        return HighlightButton(
-                          useFocus: false,
-                          focusNode: AppFocusNode(),
-                          selected: isSelected,
-                          text: value,
-                          icon: Icon(Icons.close_rounded, size: 30.w, color: isSelected ? Colors.black : Colors.white),
-                          onTap: () => controller.removeShieldWord(value),
-                        );
-                      }).toList(),
+                      children: controller.settings.shieldList
+                          .asMap()
+                          .entries
+                          .map((entry) {
+                            final int index = entry.key;
+                            final String value = entry.value;
+                            final isSelected =
+                                controller.selectedShieldIndex.value == index;
+                            return HighlightButton(
+                              useFocus: false,
+                              focusNode: controller.panelPassiveFocusNode,
+                              selected: isSelected,
+                              text: value,
+                              icon: Icon(
+                                Icons.close_rounded,
+                                size: 30.w,
+                                color: isSelected ? Colors.black : Colors.white,
+                              ),
+                              onTap: () => controller.removeShieldWord(value),
+                            );
+                          })
+                          .toList(),
                     ),
                   ),
                 ),
@@ -505,8 +568,10 @@ class RefreshButton extends StatelessWidget {
       child: Obx(
         () => HighlightIconButton(
           useFocus: false,
-          focusNode: AppFocusNode(),
-          selected: controller.currentBottomClickType.value == BottomButtonClickType.refresh,
+          focusNode: controller.panelPassiveFocusNode,
+          selected:
+              controller.currentBottomClickType.value ==
+              BottomButtonClickType.refresh,
           iconData: Icons.refresh_rounded,
           onTap: () {
             controller.refresh();
@@ -530,21 +595,27 @@ class DanmakuButton extends StatelessWidget {
       child: Obx(
         () => HighlightIconButton(
           useFocus: false,
-          focusNode: AppFocusNode(),
-          selected: controller.currentBottomClickType.value == BottomButtonClickType.danmaku,
+          focusNode: controller.panelPassiveFocusNode,
+          selected:
+              controller.currentBottomClickType.value ==
+              BottomButtonClickType.danmaku,
           icon: controller.hideDanmaku.value
               ? SvgPicture.asset(
                   width: 60.w,
                   'assets/images/video/danmu_close.svg',
                   // ignore: deprecated_member_use
-                  color: controller.currentBottomClickType.value == BottomButtonClickType.danmaku
+                  color:
+                      controller.currentBottomClickType.value ==
+                          BottomButtonClickType.danmaku
                       ? Colors.black
                       : Colors.white,
                 )
               : SvgPicture.asset(
                   'assets/images/video/danmu_open.svg',
                   // ignore: deprecated_member_use
-                  color: controller.currentBottomClickType.value == BottomButtonClickType.danmaku
+                  color:
+                      controller.currentBottomClickType.value ==
+                          BottomButtonClickType.danmaku
                       ? Colors.black
                       : Colors.white,
                   width: 60.w,
@@ -570,13 +641,17 @@ class SettingsButton extends StatelessWidget {
       child: Obx(
         () => HighlightIconButton(
           useFocus: false,
-          focusNode: AppFocusNode(),
-          selected: controller.currentBottomClickType.value == BottomButtonClickType.settings,
+          focusNode: controller.panelPassiveFocusNode,
+          selected:
+              controller.currentBottomClickType.value ==
+              BottomButtonClickType.settings,
           icon: SvgPicture.asset(
             'assets/images/video/danmu_setting.svg',
             width: 60.w,
             // ignore: deprecated_member_use
-            color: controller.currentBottomClickType.value == BottomButtonClickType.settings
+            color:
+                controller.currentBottomClickType.value ==
+                    BottomButtonClickType.settings
                 ? Colors.black
                 : Colors.white,
           ),
@@ -601,9 +676,13 @@ class FavoriteButton extends StatelessWidget {
       child: Obx(
         () => HighlightButton(
           useFocus: false,
-          text: !controller.settings.isFavorite(controller.room) ? '未关注' : "已关注",
-          focusNode: AppFocusNode(),
-          selected: controller.currentBottomClickType.value == BottomButtonClickType.favorite,
+          text: !controller.settings.isFavorite(controller.room)
+              ? '未关注'
+              : "已关注",
+          focusNode: controller.panelPassiveFocusNode,
+          selected:
+              controller.currentBottomClickType.value ==
+              BottomButtonClickType.favorite,
           iconData: !controller.settings.isFavorite(controller.room)
               ? Icons.highlight_remove_outlined
               : Icons.add_task_rounded,
@@ -653,7 +732,10 @@ class DanmakuSetting extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(color: Get.theme.cardColor, borderRadius: BorderRadius.circular(10)),
+      decoration: BoxDecoration(
+        color: Get.theme.cardColor,
+        borderRadius: BorderRadius.circular(10),
+      ),
       child: Column(
         children: [
           AppStyle.vGap24,
@@ -663,7 +745,10 @@ class DanmakuSetting extends StatelessWidget {
               AppStyle.hGap32,
               Text(
                 "弹幕设置",
-                style: AppStyle.titleStyleWhite.copyWith(fontSize: 36.w, fontWeight: FontWeight.bold),
+                style: AppStyle.titleStyleWhite.copyWith(
+                  fontSize: 36.w,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               AppStyle.hGap24,
               const Spacer(),
@@ -677,9 +762,11 @@ class DanmakuSetting extends StatelessWidget {
                 Obx(
                   () => SettingsItemWidget(
                     useFocus: false,
-                    focusNode: AppFocusNode(),
+                    focusNode: controller.panelPassiveFocusNode,
                     key: VideoController.danmakuAbleKey,
-                    selected: controller.currentDanmakuClickType.value == DanmakuSettingClickType.danmakuAble,
+                    selected:
+                        controller.currentDanmakuClickType.value ==
+                        DanmakuSettingClickType.danmakuAble,
                     title: "弹幕开关",
                     items: const {0: "关", 1: "开"},
                     value: controller.hideDanmaku.value ? 0 : 1,
@@ -692,8 +779,10 @@ class DanmakuSetting extends StatelessWidget {
                 Obx(
                   () => SettingsItemWidget(
                     useFocus: false,
-                    focusNode: AppFocusNode(),
-                    selected: controller.currentDanmakuClickType.value == DanmakuSettingClickType.danmakuSize,
+                    focusNode: controller.panelPassiveFocusNode,
+                    selected:
+                        controller.currentDanmakuClickType.value ==
+                        DanmakuSettingClickType.danmakuSize,
                     title: "弹幕大小",
                     // 使用常量类定义
                     items: DanmakuConstants.sizeMap,
@@ -707,8 +796,10 @@ class DanmakuSetting extends StatelessWidget {
                 Obx(
                   () => SettingsItemWidget(
                     useFocus: false,
-                    focusNode: AppFocusNode(),
-                    selected: controller.currentDanmakuClickType.value == DanmakuSettingClickType.danmakuSpeed,
+                    focusNode: controller.panelPassiveFocusNode,
+                    selected:
+                        controller.currentDanmakuClickType.value ==
+                        DanmakuSettingClickType.danmakuSpeed,
                     title: "弹幕速度",
                     // 使用常量类定义
                     items: DanmakuConstants.speedMap,
@@ -722,8 +813,10 @@ class DanmakuSetting extends StatelessWidget {
                 Obx(
                   () => SettingsItemWidget(
                     useFocus: false,
-                    focusNode: AppFocusNode(),
-                    selected: controller.currentDanmakuClickType.value == DanmakuSettingClickType.danmakuArea,
+                    focusNode: controller.panelPassiveFocusNode,
+                    selected:
+                        controller.currentDanmakuClickType.value ==
+                        DanmakuSettingClickType.danmakuArea,
                     title: "显示区域",
                     // 使用常量类定义
                     items: DanmakuConstants.areaMap,
@@ -737,8 +830,10 @@ class DanmakuSetting extends StatelessWidget {
                 Obx(
                   () => SettingsItemWidget(
                     useFocus: false,
-                    focusNode: AppFocusNode(),
-                    selected: controller.currentDanmakuClickType.value == DanmakuSettingClickType.danmakuTopArea,
+                    focusNode: controller.panelPassiveFocusNode,
+                    selected:
+                        controller.currentDanmakuClickType.value ==
+                        DanmakuSettingClickType.danmakuTopArea,
                     title: "距离顶部",
                     // 使用常量类定义
                     items: DanmakuConstants.distanceMap,
@@ -752,8 +847,10 @@ class DanmakuSetting extends StatelessWidget {
                 Obx(
                   () => SettingsItemWidget(
                     useFocus: false,
-                    focusNode: AppFocusNode(),
-                    selected: controller.currentDanmakuClickType.value == DanmakuSettingClickType.danmakuBottomArea,
+                    focusNode: controller.panelPassiveFocusNode,
+                    selected:
+                        controller.currentDanmakuClickType.value ==
+                        DanmakuSettingClickType.danmakuBottomArea,
                     title: "距离底部",
                     // 使用常量类定义
                     items: DanmakuConstants.distanceMap,
@@ -767,8 +864,10 @@ class DanmakuSetting extends StatelessWidget {
                 Obx(
                   () => SettingsItemWidget(
                     useFocus: false,
-                    focusNode: AppFocusNode(),
-                    selected: controller.currentDanmakuClickType.value == DanmakuSettingClickType.danmakuOpacity,
+                    focusNode: controller.panelPassiveFocusNode,
+                    selected:
+                        controller.currentDanmakuClickType.value ==
+                        DanmakuSettingClickType.danmakuOpacity,
                     title: "不透明度",
                     // 使用常量类定义
                     items: DanmakuConstants.areaMap,
@@ -782,8 +881,10 @@ class DanmakuSetting extends StatelessWidget {
                 Obx(
                   () => SettingsItemWidget(
                     useFocus: false,
-                    focusNode: AppFocusNode(),
-                    selected: controller.currentDanmakuClickType.value == DanmakuSettingClickType.danmakuStorke,
+                    focusNode: controller.panelPassiveFocusNode,
+                    selected:
+                        controller.currentDanmakuClickType.value ==
+                        DanmakuSettingClickType.danmakuStorke,
                     title: "描边宽度",
                     // 使用常量类定义
                     items: DanmakuConstants.strokeMap,
@@ -835,7 +936,10 @@ class ResolutionSetting extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(color: Get.theme.cardColor, borderRadius: BorderRadius.circular(10)),
+      decoration: BoxDecoration(
+        color: Get.theme.cardColor,
+        borderRadius: BorderRadius.circular(10),
+      ),
       child: Column(
         children: [
           AppStyle.vGap24,
@@ -845,7 +949,10 @@ class ResolutionSetting extends StatelessWidget {
               AppStyle.hGap32,
               Text(
                 "清晰度设置",
-                style: AppStyle.titleStyleWhite.copyWith(fontSize: 36.w, fontWeight: FontWeight.bold),
+                style: AppStyle.titleStyleWhite.copyWith(
+                  fontSize: 36.w,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               AppStyle.hGap24,
               const Spacer(),
@@ -860,7 +967,7 @@ class ResolutionSetting extends StatelessWidget {
                     padding: AppStyle.edgeInsetsA24,
                     child: HighlightButton(
                       text: quality.quality,
-                      focusNode: AppFocusNode(),
+                      focusNode: controller.panelFocusNode('quality-${e.key}'),
                       selected: controller.qualityCurrentIndex.value == e.key,
                     ),
                   );
@@ -907,7 +1014,10 @@ class LineSetting extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(color: Get.theme.cardColor, borderRadius: BorderRadius.circular(10)),
+      decoration: BoxDecoration(
+        color: Get.theme.cardColor,
+        borderRadius: BorderRadius.circular(10),
+      ),
       child: Column(
         children: [
           AppStyle.vGap24,
@@ -917,7 +1027,10 @@ class LineSetting extends StatelessWidget {
               AppStyle.hGap32,
               Text(
                 "线路切换",
-                style: AppStyle.titleStyleWhite.copyWith(fontSize: 36.w, fontWeight: FontWeight.bold),
+                style: AppStyle.titleStyleWhite.copyWith(
+                  fontSize: 36.w,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               AppStyle.hGap24,
               const Spacer(),
@@ -933,7 +1046,7 @@ class LineSetting extends StatelessWidget {
                     padding: AppStyle.edgeInsetsA24,
                     child: HighlightButton(
                       text: "线路${index + 1}",
-                      focusNode: AppFocusNode(),
+                      focusNode: controller.panelFocusNode('line-$index'),
                       selected: controller.lineCurrentIndex.value == index,
                     ),
                   );
@@ -948,14 +1061,20 @@ class LineSetting extends StatelessWidget {
 }
 
 class ChannelVideoWidget extends StatelessWidget {
-  const ChannelVideoWidget({super.key, required this.controller, required this.barHeight});
+  const ChannelVideoWidget({
+    super.key,
+    required this.controller,
+    required this.barHeight,
+  });
 
   final VideoController controller;
   final double barHeight;
   @override
   Widget build(BuildContext context) {
     return Obx(() {
-      LiveRoom room = controller.settings.currentPlayList[controller.settings.currentPlayListNodeIndex.value];
+      LiveRoom room = controller
+          .settings
+          .currentPlayList[controller.settings.currentPlayListNodeIndex.value];
       return AnimatedPositioned(
         top: controller.showChangeNameFlag.value ? 0 : -barHeight,
         left: 0,
@@ -1020,7 +1139,10 @@ class FavoriteChoosePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: BoxDecoration(color: Get.theme.cardColor, borderRadius: BorderRadius.circular(10)),
+      decoration: BoxDecoration(
+        color: Get.theme.cardColor,
+        borderRadius: BorderRadius.circular(10),
+      ),
       child: Column(
         children: [
           AppStyle.vGap24,
@@ -1030,7 +1152,10 @@ class FavoriteChoosePanel extends StatelessWidget {
               AppStyle.hGap32,
               Text(
                 "播放列表",
-                style: AppStyle.titleStyleWhite.copyWith(fontSize: 36.w, fontWeight: FontWeight.bold),
+                style: AppStyle.titleStyleWhite.copyWith(
+                  fontSize: 36.w,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               AppStyle.hGap24,
               const Spacer(),
@@ -1049,19 +1174,31 @@ class FavoriteChoosePanel extends StatelessWidget {
                       title: controller.settings.currentPlayList[index].title,
                       trailing: HighlightButton(
                         useFocus: false,
-                        text: !controller.settings.isFavorite(controller.settings.currentPlayList[index])
+                        text:
+                            !controller.settings.isFavorite(
+                              controller.settings.currentPlayList[index],
+                            )
                             ? '未关注'
                             : "已关注",
-                        focusNode: AppFocusNode(),
+                        focusNode: controller.panelPassiveFocusNode,
                         selected: controller.beforePlayNodeIndex.value == index,
-                        iconData: !controller.settings.isFavorite(controller.settings.currentPlayList[index])
+                        iconData:
+                            !controller.settings.isFavorite(
+                              controller.settings.currentPlayList[index],
+                            )
                             ? Icons.highlight_remove_outlined
                             : Icons.add_task_rounded,
                         onTap: () {
-                          if (controller.settings.isFavorite(controller.settings.currentPlayList[index])) {
-                            controller.settings.removeRoom(controller.settings.currentPlayList[index]);
+                          if (controller.settings.isFavorite(
+                            controller.settings.currentPlayList[index],
+                          )) {
+                            controller.settings.removeRoom(
+                              controller.settings.currentPlayList[index],
+                            );
                           } else {
-                            controller.settings.addRoom(controller.settings.currentPlayList[index]);
+                            controller.settings.addRoom(
+                              controller.settings.currentPlayList[index],
+                            );
                           }
                         },
                       ),
@@ -1069,15 +1206,21 @@ class FavoriteChoosePanel extends StatelessWidget {
                         width: 60,
                         height: 60,
                         decoration: BoxDecoration(
-                          borderRadius: const BorderRadius.all(Radius.circular(8.0)),
+                          borderRadius: const BorderRadius.all(
+                            Radius.circular(8.0),
+                          ),
                           image: DecorationImage(
-                            image: CachedNetworkImageProvider(controller.settings.currentPlayList[index].avatar),
+                            image: CachedNetworkImageProvider(
+                              controller.settings.currentPlayList[index].avatar,
+                              maxWidth: 120,
+                              maxHeight: 120,
+                            ),
                             fit: BoxFit.fill,
                           ),
                         ),
                       ),
                       subtitle: controller.settings.currentPlayList[index].nick,
-                      focusNode: AppFocusNode(),
+                      focusNode: controller.panelPassiveFocusNode,
                       useFocus: false,
                       selected: controller.beforePlayNodeIndex.value == index,
                       onTap: () {

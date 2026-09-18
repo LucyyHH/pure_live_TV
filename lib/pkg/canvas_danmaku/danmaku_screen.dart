@@ -13,13 +13,18 @@ class DanmakuScreen extends StatefulWidget {
   final DanmakuController controller;
   final DanmakuOption option;
 
-  const DanmakuScreen({required this.controller, required this.option, super.key});
+  const DanmakuScreen({
+    required this.controller,
+    required this.option,
+    super.key,
+  });
 
   @override
   State<DanmakuScreen> createState() => _DanmakuScreenState();
 }
 
-class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateMixin, WidgetsBindingObserver {
+class _DanmakuScreenState extends State<DanmakuScreen>
+    with TickerProviderStateMixin, WidgetsBindingObserver {
   double _viewWidth = 0;
   double _viewHeight = 0;
   late DanmakuController _controller;
@@ -31,13 +36,13 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
   final List<DanmakuItem> _topDanmakuItems = [];
   final List<DanmakuItem> _bottomDanmakuItems = [];
   final List<DanmakuItem> _specialDanmakuItems = [];
-  final List<DanmakuItem> _flattenedScrollDanmakus = [];
   static final List<FontWeight> _fontWeights = FontWeight.values;
   late double _danmakuHeight;
   late int _trackCount;
   final List<double> _trackYPositions = [];
   final _random = Random();
   final _stopwatch = Stopwatch();
+  Timer? _cleanupTimer;
   bool _running = true;
 
   int get _tick => _stopwatch.elapsedMilliseconds;
@@ -87,7 +92,8 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
 
     final topOffset = _option.topAreaDistance;
     final bottomOffset = _option.bottomAreaDistance;
-    double displayHeight = (_viewHeight - topOffset - bottomOffset) * _option.area;
+    double displayHeight =
+        (_viewHeight - topOffset - bottomOffset) * _option.area;
 
     _trackCount = (displayHeight / _danmakuHeight).floor().clamp(0, 999);
     _trackYPositions.clear();
@@ -112,7 +118,7 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
     _animationController.dispose();
     _staticAnimationController.dispose();
     _stopwatch.stop();
-    _flattenedScrollDanmakus.clear();
+    _cleanupTimer?.cancel();
     super.dispose();
   }
 
@@ -136,11 +142,18 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
             style: TextStyle(
               color: content.color,
               fontSize: content.fontSize,
-              fontWeight: _fontWeights[_option.fontWeight.clamp(0, _fontWeights.length - 1)],
+              fontWeight:
+                  _fontWeights[_option.fontWeight.clamp(
+                    0,
+                    _fontWeights.length - 1,
+                  )],
               shadows: content.hasStroke
                   ? [
                       Shadow(
-                        color: Colors.black.withAlpha((255 * (special.alphaTween?.begin ?? content.color.a)).toInt()),
+                        color: Colors.black.withAlpha(
+                          (255 * (special.alphaTween?.begin ?? content.color.a))
+                              .toInt(),
+                        ),
                         blurRadius: 2,
                       ),
                     ]
@@ -175,9 +188,19 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
     final danmakuHeight = _danmakuHeight; // 高度直接复用几何初始化的行高，无需重复测算
 
     // 3. 高性能段落生成：不再使用两个 TextPainter 拆开套用
-    final ui.Paragraph paragraph = Utils.generateParagraph(content, danmakuWidth, _option.fontSize, _option.fontWeight);
+    final ui.Paragraph paragraph = Utils.generateParagraph(
+      content,
+      danmakuWidth,
+      _option.fontSize,
+      _option.fontWeight,
+    );
     final ui.Paragraph? strokeParagraph = _option.showStroke
-        ? Utils.generateStrokeParagraph(content, danmakuWidth, _option.fontSize, _option.fontWeight)
+        ? Utils.generateStrokeParagraph(
+            content,
+            danmakuWidth,
+            _option.fontSize,
+            _option.fontWeight,
+          )
         : null;
 
     int idx = 1;
@@ -202,7 +225,9 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
           break;
         }
         if (content.selfSend && idx == _trackCount) {
-          final targetY = _trackYPositions.isNotEmpty ? _trackYPositions[0] : 0.0;
+          final targetY = _trackYPositions.isNotEmpty
+              ? _trackYPositions[0]
+              : 0.0;
           _scrollDanmakuByTrack
               .putIfAbsent(targetY, () => [])
               .add(
@@ -221,7 +246,8 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
           break;
         }
         if (_option.massiveMode && idx == _trackCount) {
-          final randomY = _trackYPositions[_random.nextInt(_trackYPositions.length)];
+          final randomY =
+              _trackYPositions[_random.nextInt(_trackYPositions.length)];
           _scrollDanmakuByTrack
               .putIfAbsent(randomY, () => [])
               .add(
@@ -279,7 +305,8 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
       idx++;
     }
 
-    if (!_animationController.isAnimating && (_scrollDanmakuByTrack.isNotEmpty || _specialDanmakuItems.isNotEmpty)) {
+    if (!_animationController.isAnimating &&
+        (_scrollDanmakuByTrack.isNotEmpty || _specialDanmakuItems.isNotEmpty)) {
       _animationController.repeat();
     }
   }
@@ -291,7 +318,8 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
         _running = false;
       });
       if (_animationController.isAnimating) _animationController.stop();
-      if (_staticAnimationController.isAnimating) _staticAnimationController.stop();
+      if (_staticAnimationController.isAnimating)
+        _staticAnimationController.stop();
       if (_stopwatch.isRunning) _stopwatch.stop();
     }
   }
@@ -372,13 +400,15 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
 
     final int elapsedTime = _tick - item.creationTime;
     final double timeProgress = elapsedTime / (_option.duration * 1000);
-    final double currentX = _viewWidth + ((-item.width) - _viewWidth) * timeProgress;
+    final double currentX =
+        _viewWidth + ((-item.width) - _viewWidth) * timeProgress;
 
     final existingEndPosition = currentX + item.width;
 
     if (_viewWidth - existingEndPosition < 0) return false;
     if (item.width < newDanmakuWidth) {
-      if ((1 - ((_viewWidth - currentX) / (item.width + _viewWidth))) > (_viewWidth / (_viewWidth + newDanmakuWidth))) {
+      if ((1 - ((_viewWidth - currentX) / (item.width + _viewWidth))) >
+          (_viewWidth / (_viewWidth + newDanmakuWidth))) {
         return false;
       }
     }
@@ -399,46 +429,41 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
     return true;
   }
 
-  void _startTick() async {
+  void _startTick() {
     _stopwatch.start();
-    final staticDuration = _option.duration * 1000;
+    _cleanupTimer ??= Timer.periodic(const Duration(milliseconds: 250), (_) {
+      if (!_running || !mounted) return;
 
-    while (_running && mounted) {
-      await Future.delayed(const Duration(milliseconds: 16));
-
-      final List<double> tracksToRemove = [];
-
+      final staticDuration = _option.duration * 1000;
+      final tracksToRemove = <double>[];
       _scrollDanmakuByTrack.forEach((trackY, items) {
         items.removeWhere((item) => item.xPosition + item.width < 0);
         if (items.isEmpty) tracksToRemove.add(trackY);
       });
-
       for (final trackY in tracksToRemove) {
         _scrollDanmakuByTrack.remove(trackY);
       }
 
-      final List<DanmakuItem> tempFlattened = [];
-      _scrollDanmakuByTrack.forEach((_, items) {
-        tempFlattened.addAll(items);
-      });
-
-      _flattenedScrollDanmakus.clear();
-      _flattenedScrollDanmakus.addAll(tempFlattened);
-
-      _topDanmakuItems.removeWhere((item) => (_tick - item.creationTime) >= staticDuration);
-      _bottomDanmakuItems.removeWhere((item) => (_tick - item.creationTime) >= staticDuration);
-      _specialDanmakuItems.removeWhere(
-        (item) => (_tick - item.creationTime) >= (item.content as SpecialDanmakuContentItem).duration,
+      _topDanmakuItems.removeWhere(
+        (item) => (_tick - item.creationTime) >= staticDuration,
       );
-    }
-    _stopwatch.stop();
+      _bottomDanmakuItems.removeWhere(
+        (item) => (_tick - item.creationTime) >= staticDuration,
+      );
+      _specialDanmakuItems.removeWhere(
+        (item) =>
+            (_tick - item.creationTime) >=
+            (item.content as SpecialDanmakuContentItem).duration,
+      );
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth != _viewWidth || constraints.maxHeight != _viewHeight) {
+        if (constraints.maxWidth != _viewWidth ||
+            constraints.maxHeight != _viewHeight) {
           _viewWidth = constraints.maxWidth;
           _viewHeight = constraints.maxHeight;
           _calculateTracksGeometry();
@@ -461,7 +486,7 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
                                 size: Size(_viewWidth, _viewHeight),
                                 painter: ScrollDanmakuPainter(
                                   _animationController.value,
-                                  _flattenedScrollDanmakus,
+                                  _scrollDanmakuByTrack,
                                   _option.duration,
                                   _option.fontSize,
                                   _option.fontWeight,

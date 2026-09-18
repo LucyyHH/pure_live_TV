@@ -29,7 +29,10 @@ class AreasRoomPage extends GetView<AreaRoomsController> {
               AppStyle.hGap32,
               Text(
                 controller.subCategory.areaName!,
-                style: AppStyle.titleStyleWhite.copyWith(fontSize: 36.w, fontWeight: FontWeight.bold),
+                style: AppStyle.titleStyleWhite.copyWith(
+                  fontSize: 36.w,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               AppStyle.hGap24,
               const Spacer(),
@@ -39,7 +42,10 @@ class AreasRoomPage extends GetView<AreaRoomsController> {
                   child: SizedBox(
                     width: 48.w,
                     height: 48.w,
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 4.w),
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 4.w,
+                    ),
                   ),
                 ),
               ),
@@ -67,15 +73,9 @@ class AreasRoomPage extends GetView<AreaRoomsController> {
                 mainAxisSpacing: 20.w,
                 controller: controller.scrollController,
                 itemBuilder: (_, i) {
-                  var item = controller.list[i];
-                  if (i == 0) {
-                    Future.delayed(Duration.zero, () {
-                      if (controller.currentPage == 2) {
-                        item.focusNode.requestFocus();
-                      }
-                    });
-                  }
+                  final item = controller.list[i];
                   return RoomCard(
+                    key: ValueKey('${item.platform}-${item.roomId}'),
                     room: item,
                     dense: true,
                     focusNode: item.focusNode,

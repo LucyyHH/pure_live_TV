@@ -32,19 +32,16 @@ class HighlightListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (useFocus) {
-      focusNode.isFoucsed.listen((hasFocus) {
-        onFocusChange?.call(hasFocus);
-      });
-    }
-
     return Obx(
       () => IconTheme(
-        data: IconThemeData(color: focusNode.isFoucsed.value ? Colors.black : Colors.white),
+        data: IconThemeData(
+          color: focusNode.isFoucsed.value ? Colors.black : Colors.white,
+        ),
         child: useFocus
             ? HighlightWidget(
                 onTap: onTap,
                 autofocus: autofocus,
+                onFocusChange: onFocusChange,
                 focusNode: focusNode,
                 useFocus: useFocus,
                 selected: selected,
@@ -62,26 +59,36 @@ class HighlightListTile extends StatelessWidget {
                           children: [
                             Text(
                               title,
-                              style: focusNode.isFoucsed.value ? AppStyle.textStyleBlack : AppStyle.textStyleWhite,
+                              style: focusNode.isFoucsed.value
+                                  ? AppStyle.textStyleBlack
+                                  : AppStyle.textStyleWhite,
                               maxLines: 2,
                             ),
                             if (subtitle != null)
                               Text(
                                 subtitle!,
                                 style: focusNode.isFoucsed.value
-                                    ? AppStyle.textStyleBlack.copyWith(fontSize: 24.w)
-                                    : AppStyle.textStyleWhite.copyWith(fontSize: 24.w),
+                                    ? AppStyle.textStyleBlack.copyWith(
+                                        fontSize: 24.w,
+                                      )
+                                    : AppStyle.textStyleWhite.copyWith(
+                                        fontSize: 24.w,
+                                      ),
                                 maxLines: 1,
                               ),
                           ],
                         ),
                       ),
                       AppStyle.hGap12,
-                      if (onTap != null && focusNode.isFoucsed.value && trailing == null)
+                      if (onTap != null &&
+                          focusNode.isFoucsed.value &&
+                          trailing == null)
                         Icon(
                           Icons.chevron_right,
                           size: 40.w,
-                          color: focusNode.isFoucsed.value ? Colors.black : Colors.white,
+                          color: focusNode.isFoucsed.value
+                              ? Colors.black
+                              : Colors.white,
                         ),
                       ?trailing,
                     ],
@@ -91,6 +98,7 @@ class HighlightListTile extends StatelessWidget {
             : HighlightWidget(
                 onTap: onTap,
                 autofocus: false,
+                onFocusChange: onFocusChange,
                 focusNode: focusNode,
                 useFocus: useFocus,
                 selected: selected,
@@ -108,15 +116,21 @@ class HighlightListTile extends StatelessWidget {
                           children: [
                             Text(
                               title,
-                              style: selected ? AppStyle.textStyleBlack : AppStyle.textStyleWhite,
+                              style: selected
+                                  ? AppStyle.textStyleBlack
+                                  : AppStyle.textStyleWhite,
                               maxLines: 2,
                             ),
                             if (subtitle != null)
                               Text(
                                 subtitle!,
                                 style: selected
-                                    ? AppStyle.textStyleBlack.copyWith(fontSize: 24.w)
-                                    : AppStyle.textStyleWhite.copyWith(fontSize: 24.w),
+                                    ? AppStyle.textStyleBlack.copyWith(
+                                        fontSize: 24.w,
+                                      )
+                                    : AppStyle.textStyleWhite.copyWith(
+                                        fontSize: 24.w,
+                                      ),
                                 maxLines: 1,
                               ),
                           ],
@@ -124,7 +138,11 @@ class HighlightListTile extends StatelessWidget {
                       ),
                       AppStyle.hGap12,
                       if (onTap != null && selected && trailing == null)
-                        Icon(Icons.chevron_right, size: 40.w, color: selected ? Colors.black : Colors.white),
+                        Icon(
+                          Icons.chevron_right,
+                          size: 40.w,
+                          color: selected ? Colors.black : Colors.white,
+                        ),
                       ?trailing,
                     ],
                   ),

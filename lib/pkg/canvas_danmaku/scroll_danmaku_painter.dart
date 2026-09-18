@@ -4,7 +4,7 @@ import 'package:pure_live/pkg/canvas_danmaku/utils/utils.dart';
 
 class ScrollDanmakuPainter extends CustomPainter {
   final double progress;
-  final List<DanmakuItem> scrollDanmakuItems;
+  final Map<double, List<DanmakuItem>> scrollDanmakuByTrack;
   final int danmakuDurationInSeconds;
   final double fontSize;
   final int fontWeight;
@@ -21,7 +21,7 @@ class ScrollDanmakuPainter extends CustomPainter {
 
   ScrollDanmakuPainter(
     this.progress,
-    this.scrollDanmakuItems,
+    this.scrollDanmakuByTrack,
     this.danmakuDurationInSeconds,
     this.fontSize,
     this.fontWeight,
@@ -35,41 +35,45 @@ class ScrollDanmakuPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final double startPosition = size.width;
 
-    for (final item in scrollDanmakuItems) {
-      final currentWidth = item.cachedWidth;
-      if (currentWidth == null) continue;
+    for (final items in scrollDanmakuByTrack.values) {
+      for (final item in items) {
+        final currentWidth = item.cachedWidth;
+        if (currentWidth == null) continue;
 
-      final int elapsedTime = tick - item.creationTime;
-      final double timeProgress = elapsedTime / totalDuration;
+        final int elapsedTime = tick - item.creationTime;
+        final double timeProgress = elapsedTime / totalDuration;
 
-      if (timeProgress >= 1.0 || timeProgress < 0) continue;
+        if (timeProgress >= 1.0 || timeProgress < 0) continue;
 
-      final double endPosition = -currentWidth;
-      final double currentX = startPosition + (endPosition - startPosition) * timeProgress;
+        final double endPosition = -currentWidth;
+        final double currentX =
+            startPosition + (endPosition - startPosition) * timeProgress;
 
-      item.xPosition = currentX;
+        item.xPosition = currentX;
 
-      if (currentX < -currentWidth || currentX > size.width) {
-        continue;
+        if (currentX < -currentWidth || currentX > size.width) {
+          continue;
+        }
+
+        Utils.drawMixedContent(
+          canvas,
+          item.content,
+          Offset(currentX, item.yPosition),
+          fontSize,
+          fontWeight,
+          showStroke,
+          item.content.selfSend,
+          _selfSendPaint,
+        );
       }
-
-      Utils.drawMixedContent(
-        canvas,
-        item.content,
-        Offset(currentX, item.yPosition),
-        fontSize,
-        fontWeight,
-        showStroke,
-        item.content.selfSend,
-        _selfSendPaint,
-      );
     }
   }
 
   @override
   bool shouldRepaint(covariant ScrollDanmakuPainter oldDelegate) {
     return tick != oldDelegate.tick ||
-        scrollDanmakuItems.length != oldDelegate.scrollDanmakuItems.length ||
+        scrollDanmakuByTrack.length !=
+            oldDelegate.scrollDanmakuByTrack.length ||
         progress != oldDelegate.progress ||
         fontSize != oldDelegate.fontSize ||
         fontWeight != oldDelegate.fontWeight ||
