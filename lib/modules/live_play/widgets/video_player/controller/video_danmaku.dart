@@ -24,17 +24,42 @@ extension VideoDanmaku on VideoController {
     // 弹幕显示区域
     _listenDouble('danmakuArea', danmakuArea, settings.danmakuArea, 1.0);
     // 弹幕顶部留白
-    _listenDouble('danmakuTopArea', danmakuTopArea, settings.danmakuTopArea, 0.0);
+    _listenDouble(
+      'danmakuTopArea',
+      danmakuTopArea,
+      settings.danmakuTopArea,
+      0.0,
+    );
     // 弹幕底部留白
-    _listenDouble('danmakuBottomArea', danmakuBottomArea, settings.danmakuBottomArea, 0.0);
+    _listenDouble(
+      'danmakuBottomArea',
+      danmakuBottomArea,
+      settings.danmakuBottomArea,
+      0.0,
+    );
     // 弹幕速度
     _listenDouble('danmakuSpeed', danmakuSpeed, settings.danmakuSpeed, 8.0);
     // 弹幕字体大小
-    _listenDouble('danmakuFontSize', danmakuFontSize, settings.danmakuFontSize, 16.0);
+    _listenDouble(
+      'danmakuFontSize',
+      danmakuFontSize,
+      settings.danmakuFontSize,
+      16.0,
+    );
     // 弹幕描边
-    _listenDouble('danmakuFontBorder', danmakuFontBorder, settings.danmakuFontBorder, 4.0);
+    _listenDouble(
+      'danmakuFontBorder',
+      danmakuFontBorder,
+      settings.danmakuFontBorder,
+      4.0,
+    );
     // 弹幕透明度
-    _listenDouble('danmakuOpacity', danmakuOpacity, settings.danmakuOpacity, 1.0);
+    _listenDouble(
+      'danmakuOpacity',
+      danmakuOpacity,
+      settings.danmakuOpacity,
+      1.0,
+    );
   }
 
   /// 更新弹幕配置
@@ -66,24 +91,40 @@ extension VideoDanmaku on VideoController {
   }
 
   /// 布尔值持久化监听
-  void _listenBool(String key, RxBool rx, RxBool settingRx, bool def, {Function(bool)? onChanged}) {
+  void _listenBool(
+    String key,
+    RxBool rx,
+    RxBool settingRx,
+    bool def, {
+    Function(bool)? onChanged,
+  }) {
     rx.value = HivePrefUtil.getBool(key) ?? def;
-    rx.listen((v) {
-      HivePrefUtil.setBool(key, v);
-      settingRx.value = v;
-      onChanged?.call(v);
-    });
+    trackSubscription(
+      rx.listen((v) {
+        HivePrefUtil.setBool(key, v);
+        settingRx.value = v;
+        onChanged?.call(v);
+      }),
+    );
   }
 
   /// 浮点值持久化监听
-  void _listenDouble(String key, RxDouble rx, RxDouble settingRx, double def, {Function(double)? onChanged}) {
+  void _listenDouble(
+    String key,
+    RxDouble rx,
+    RxDouble settingRx,
+    double def, {
+    Function(double)? onChanged,
+  }) {
     rx.value = HivePrefUtil.getDouble(key) ?? def;
-    rx.listen((v) {
-      HivePrefUtil.setDouble(key, v);
-      settingRx.value = v;
-      onChanged?.call(v);
-      updateDanmakuConfig();
-    });
+    trackSubscription(
+      rx.listen((v) {
+        HivePrefUtil.setDouble(key, v);
+        settingRx.value = v;
+        onChanged?.call(v);
+        updateDanmakuConfig();
+      }),
+    );
   }
 
   /// 弹幕参数左调

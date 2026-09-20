@@ -1,8 +1,8 @@
+import 'package:pure_live/common/widgets/room_grid_delegate.dart';
 import 'package:pure_live/common/index.dart';
 import 'package:pure_live/app/app_focus_node.dart';
 import 'package:pure_live/common/widgets/button/highlight_button.dart';
 import 'package:pure_live/modules/area_rooms/area_rooms_controller.dart';
-import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
 class AreasRoomPage extends GetView<AreaRoomsController> {
   const AreasRoomPage({super.key});
@@ -29,7 +29,10 @@ class AreasRoomPage extends GetView<AreaRoomsController> {
               AppStyle.hGap32,
               Text(
                 controller.subCategory.areaName!,
-                style: AppStyle.titleStyleWhite.copyWith(fontSize: 36.w, fontWeight: FontWeight.bold),
+                style: AppStyle.titleStyleWhite.copyWith(
+                  fontSize: 36.w,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               AppStyle.hGap24,
               const Spacer(),
@@ -39,7 +42,10 @@ class AreasRoomPage extends GetView<AreaRoomsController> {
                   child: SizedBox(
                     width: 48.w,
                     height: 48.w,
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 4.w),
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 4.w,
+                    ),
                   ),
                 ),
               ),
@@ -59,23 +65,18 @@ class AreasRoomPage extends GetView<AreaRoomsController> {
           AppStyle.vGap24,
           Expanded(
             child: Obx(
-              () => MasonryGridView.count(
+              () => GridView.builder(
                 padding: AppStyle.edgeInsetsA48,
                 itemCount: controller.list.length,
-                crossAxisCount: 5,
-                crossAxisSpacing: 24.w,
-                mainAxisSpacing: 20.w,
+                gridDelegate: RoomGridDelegate(
+                  crossAxisSpacing: 24.w,
+                  mainAxisSpacing: 20.w,
+                ),
                 controller: controller.scrollController,
                 itemBuilder: (_, i) {
-                  var item = controller.list[i];
-                  if (i == 0) {
-                    Future.delayed(Duration.zero, () {
-                      if (controller.currentPage == 2) {
-                        item.focusNode.requestFocus();
-                      }
-                    });
-                  }
+                  final item = controller.list[i];
                   return RoomCard(
+                    key: ValueKey('${item.platform}-${item.roomId}'),
                     room: item,
                     dense: true,
                     focusNode: item.focusNode,

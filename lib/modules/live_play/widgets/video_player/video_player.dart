@@ -24,8 +24,13 @@ class _VideoPlayerState extends State<VideoPlayer> {
       child: CachedNetworkImage(
         cacheManager: CustomCacheManager.instance,
         imageUrl: controller.room.cover!,
+        memCacheWidth: (480.w).round(),
+        memCacheHeight: (270.h).round(),
+        maxWidthDiskCache: (960.w).round(),
+        maxHeightDiskCache: (540.h).round(),
         fit: BoxFit.fill,
-        errorWidget: (context, error, stackTrace) => const Center(child: Icon(Icons.live_tv_rounded, size: 48)),
+        errorWidget: (context, error, stackTrace) =>
+            const Center(child: Icon(Icons.live_tv_rounded, size: 48)),
       ),
     );
   }

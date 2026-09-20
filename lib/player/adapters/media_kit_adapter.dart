@@ -83,7 +83,10 @@ class MediaKitAdapter implements UnifiedPlayer {
 
         await native.setProperty('force-seekable', 'yes');
 
-        await native.setProperty('protocol_whitelist', 'httpproxy,udp,rtp,tcp,tls,data,file,http,https,crypto');
+        await native.setProperty(
+          'protocol_whitelist',
+          'httpproxy,udp,rtp,tcp,tls,data,file,http,https,crypto',
+        );
 
         await native.setProperty('demuxer-lavf-probsize', '2097152');
 
@@ -103,7 +106,10 @@ class MediaKitAdapter implements UnifiedPlayer {
       _controller = settings.playerCompatMode.value
           ? VideoController(
               _player,
-              configuration: const VideoControllerConfiguration(vo: 'mediacodec_embed', hwdec: 'mediacodec'),
+              configuration: const VideoControllerConfiguration(
+                vo: 'mediacodec_embed',
+                hwdec: 'mediacodec',
+              ),
             )
           : settings.customPlayerOutput.value
           ? VideoController(
@@ -145,7 +151,12 @@ class MediaKitAdapter implements UnifiedPlayer {
   // =========================
 
   @override
-  Future<void> setDataSource(String url, List<String> playUrls, Map<String, String> headers, {LiveRoom? room}) async {
+  Future<void> setDataSource(
+    String url,
+    List<String> playUrls,
+    Map<String, String> headers, {
+    LiveRoom? room,
+  }) async {
     if (_disposed) return;
 
     if (_currentUrl == url && isPlayingNow) {
@@ -166,11 +177,14 @@ class MediaKitAdapter implements UnifiedPlayer {
       _heightSubject.add(null);
 
       await _player.open(Media(url, httpHeaders: headers), play: true);
+      if (_disposed) return;
 
       _stateSubject.add(PlayerState.ready);
 
       await setVolume(1.0);
+      if (_disposed) return;
     } catch (e, s) {
+      if (_disposed) return;
       final exception = PlayerException(
         message: 'Media open failed',
         type: PlayerErrorType.source,
@@ -184,9 +198,7 @@ class MediaKitAdapter implements UnifiedPlayer {
 
       throw exception;
     } finally {
-      if (!_disposed) {
-        _loadingSubject.add(false);
-      }
+      if (!_disposed) _loadingSubject.add(false);
     }
   }
 
@@ -233,7 +245,9 @@ class MediaKitAdapter implements UnifiedPlayer {
         if (loading) {
           _stateSubject.add(PlayerState.buffering);
         } else {
-          _stateSubject.add(_playingSubject.value ? PlayerState.playing : PlayerState.paused);
+          _stateSubject.add(
+            _playingSubject.value ? PlayerState.playing : PlayerState.paused,
+          );
         }
       },
       onError: (e, s) {
@@ -298,7 +312,14 @@ class MediaKitAdapter implements UnifiedPlayer {
     // collect
     // =========================
 
-    _subscriptions.addAll([_playingSub!, _bufferingSub!, _widthSub!, _heightSub!, _completeSub!, _errorSub!]);
+    _subscriptions.addAll([
+      _playingSub!,
+      _bufferingSub!,
+      _widthSub!,
+      _heightSub!,
+      _completeSub!,
+      _errorSub!,
+    ]);
   }
 
   // =========================
@@ -327,7 +348,14 @@ class MediaKitAdapter implements UnifiedPlayer {
   void _emitError(Object error, StackTrace stackTrace, PlayerErrorType type) {
     if (_disposed) return;
 
-    _safeAddError(PlayerException(message: error.toString(), type: type, error: error, stackTrace: stackTrace));
+    _safeAddError(
+      PlayerException(
+        message: error.toString(),
+        type: type,
+        error: error,
+        stackTrace: stackTrace,
+      ),
+    );
 
     _stateSubject.add(PlayerState.error);
   }
@@ -347,15 +375,21 @@ class MediaKitAdapter implements UnifiedPlayer {
   PlayerErrorType _mapErrorType(String error) {
     final lower = error.toLowerCase();
 
-    if (lower.contains('network') || lower.contains('timeout') || lower.contains('io')) {
+    if (lower.contains('network') ||
+        lower.contains('timeout') ||
+        lower.contains('io')) {
       return PlayerErrorType.network;
     }
 
-    if (lower.contains('codec') || lower.contains('mediacodec') || lower.contains('decode')) {
+    if (lower.contains('codec') ||
+        lower.contains('mediacodec') ||
+        lower.contains('decode')) {
       return PlayerErrorType.codec;
     }
 
-    if (lower.contains('404') || lower.contains('source') || lower.contains('open')) {
+    if (lower.contains('404') ||
+        lower.contains('source') ||
+        lower.contains('open')) {
       return PlayerErrorType.source;
     }
 

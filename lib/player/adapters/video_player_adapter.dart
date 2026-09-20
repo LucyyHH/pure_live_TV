@@ -29,15 +29,18 @@ class BetterPlayerAdapter implements UnifiedPlayer {
   Future<void> init() async {
     if (_initialized) return;
 
-    BetterPlayerConfiguration betterPlayerConfiguration = BetterPlayerConfiguration(
-      autoPlay: true,
-      fit: BoxFit.contain,
-      handleLifecycle: false,
-      fullScreenByDefault: false,
-      autoDispose: false,
-      looping: false,
-      controlsConfiguration: BetterPlayerControlsConfiguration(showControls: false),
-    );
+    BetterPlayerConfiguration betterPlayerConfiguration =
+        BetterPlayerConfiguration(
+          autoPlay: true,
+          fit: BoxFit.contain,
+          handleLifecycle: false,
+          fullScreenByDefault: false,
+          autoDispose: false,
+          looping: false,
+          controlsConfiguration: BetterPlayerControlsConfiguration(
+            showControls: false,
+          ),
+        );
 
     _controller = BetterPlayerController(betterPlayerConfiguration);
     _bindListeners();
@@ -84,7 +87,9 @@ class BetterPlayerAdapter implements UnifiedPlayer {
           break;
         case BetterPlayerEventType.exception:
           final exception = PlayerException(
-            message: event.parameters?['exception']?.toString() ?? 'BetterPlayer Error',
+            message:
+                event.parameters?['exception']?.toString() ??
+                'BetterPlayer Error',
             type: PlayerErrorType.native,
           );
           _safeAddError(exception);
@@ -119,7 +124,13 @@ class BetterPlayerAdapter implements UnifiedPlayer {
   }
 
   @override
-  Future<void> setDataSource(String url, List<String> playUrls, Map<String, String> headers, {LiveRoom? room}) async {
+  Future<void> setDataSource(
+    String url,
+    List<String> playUrls,
+    Map<String, String> headers, {
+    LiveRoom? room,
+  }) async {
+    if (_disposed) return;
     try {
       _loadingSubject.add(true);
       _widthSubject.add(null);
@@ -133,10 +144,13 @@ class BetterPlayerAdapter implements UnifiedPlayer {
       );
 
       await _controller!.setupDataSource(dataSource);
+      if (_disposed) return;
 
       _stateSubject.add(PlayerState.ready);
       await setVolume(1.0);
+      if (_disposed) return;
     } catch (e, s) {
+      if (_disposed) return;
       final exception = PlayerException(
         message: 'BetterPlayer setDataSource failed',
         type: PlayerErrorType.source,
@@ -146,7 +160,7 @@ class BetterPlayerAdapter implements UnifiedPlayer {
       _safeAddError(exception);
       throw exception;
     } finally {
-      _loadingSubject.add(false);
+      if (!_disposed) _loadingSubject.add(false);
     }
   }
 

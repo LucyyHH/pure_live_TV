@@ -1,4 +1,6 @@
 import 'dart:developer';
+import 'package:pure_live/common/services/settings_service.dart';
+import 'package:pure_live/get/get.dart';
 import 'core/player_pool.dart';
 import 'core/player_manager.dart';
 import 'models/player_engine.dart';
@@ -8,7 +10,6 @@ import 'core/line_fallback_manager.dart';
 import 'core/preload_player_manager.dart';
 import 'core/engine_fallback_manager.dart';
 import 'package:pure_live/player/adapters/video_player_adapter.dart';
-
 
 class GlobalPlayerService {
   GlobalPlayerService._();
@@ -21,7 +22,9 @@ class GlobalPlayerService {
 
   bool get initialized => _initialized;
 
-  Future<void> initialize({PlayerEngine defaultEngine = PlayerEngine.mediaKit}) async {
+  Future<void> initialize({
+    PlayerEngine defaultEngine = PlayerEngine.mediaKit,
+  }) async {
     if (_initialized) return;
 
     // 1. Setup the Pool with a factory that knows how to create each Adapter
@@ -41,6 +44,9 @@ class GlobalPlayerService {
     // 2. Instantiate the Orchestrator with all its specialized managers
     playerManager = PlayerManager(
       playerPool: playerPool,
+      preferredEngine: () => PlayerEngine
+          .values[Get.find<SettingsService>().videoPlayerIndex.value],
+      hardStopOnExit: () => Get.find<SettingsService>().useHardStopOnExit.value,
       fallbackManager: EngineFallbackManager(
         defaultEngine: PlayerEngine.mediaKit,
         supportedEngines: PlayerEngine.values,
@@ -53,9 +59,16 @@ class GlobalPlayerService {
     try {
       await playerManager.initialize(engine: defaultEngine);
       _initialized = true;
-      log("GlobalPlayerService: Initialized successfully.", name: "GlobalPlayerService");
+      log(
+        "GlobalPlayerService: Initialized successfully.",
+        name: "GlobalPlayerService",
+      );
     } catch (e) {
-      log("GlobalPlayerService: Failed to initialize: $e", name: "GlobalPlayerService", error: e);
+      log(
+        "GlobalPlayerService: Failed to initialize: $e",
+        name: "GlobalPlayerService",
+        error: e,
+      );
     }
   }
 

@@ -60,18 +60,23 @@ class BasePageController<T> extends BaseController {
   var list = <T>[].obs;
 
   var _currentTimeStamp = 0;
+  StreamSubscription<RouteChangeType>? _routeChangeSubscription;
 
   @override
   void onInit() {
-    scrollController.addListener(() {
-      if (scrollController.position.pixels >= (scrollController.position.maxScrollExtent - 100.w)) {
-        if (stopLoadMore.value) {
-          loadData();
-        }
-      }
-    });
-    settingsService.routeChangeType.listen(listener);
+    scrollController.addListener(_handleScroll);
+    _routeChangeSubscription = settingsService.routeChangeType.listen(listener);
     super.onInit();
+  }
+
+  void _handleScroll() {
+    if (!scrollController.hasClients) return;
+    if (scrollController.position.pixels >=
+        (scrollController.position.maxScrollExtent - 100.w)) {
+      if (stopLoadMore.value) {
+        loadData();
+      }
+    }
   }
 
   Future refreshData() async {
@@ -107,6 +112,7 @@ class BasePageController<T> extends BaseController {
       pageLoadding.value = currentPage == 1;
 
       var result = await getData(currentPage, pageSize);
+      if (isClosed) return;
       //是否可以加载更多
       if (result.isNotEmpty) {
         currentPage++;
@@ -125,10 +131,12 @@ class BasePageController<T> extends BaseController {
         list.addAll(result);
       }
     } catch (e) {
-      handleError(e, showPageError: currentPage == 1);
+      if (!isClosed) handleError(e, showPageError: currentPage == 1);
     } finally {
-      loadding.value = false;
-      pageLoadding.value = false;
+      if (!isClosed) {
+        loadding.value = false;
+        pageLoadding.value = false;
+      }
     }
   }
 
@@ -137,6 +145,7 @@ class BasePageController<T> extends BaseController {
   }
 
   void scrollToBottom() {
+    if (!scrollController.hasClients) return;
     scrollController.animateTo(
       scrollController.position.maxScrollExtent,
       duration: const Duration(milliseconds: 200),
@@ -145,8 +154,12 @@ class BasePageController<T> extends BaseController {
   }
 
   void scrollToTopOrRefresh() {
-    if (scrollController.offset > 0) {
-      scrollController.animateTo(0, duration: const Duration(milliseconds: 200), curve: Curves.linear);
+    if (scrollController.hasClients && scrollController.offset > 0) {
+      scrollController.animateTo(
+        0,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.linear,
+      );
     }
     refreshData();
   }
@@ -154,6 +167,10 @@ class BasePageController<T> extends BaseController {
   @override
   void onClose() {
     autoRefresh.value = false;
+    scrollController
+      ..removeListener(_handleScroll)
+      ..dispose();
+    _routeChangeSubscription?.cancel();
     super.onClose();
   }
 }

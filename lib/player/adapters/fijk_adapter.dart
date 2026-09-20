@@ -88,7 +88,10 @@ class FijkAdapter implements UnifiedPlayer {
           break;
         case FijkState.error:
           _loadingSubject.add(false);
-          final exception = PlayerException(message: 'Fijk native error', type: PlayerErrorType.native);
+          final exception = PlayerException(
+            message: 'Fijk native error',
+            type: PlayerErrorType.native,
+          );
           _safeAddError(exception);
           _player.reset();
           break;
@@ -122,18 +125,33 @@ class FijkAdapter implements UnifiedPlayer {
   }
 
   @override
-  Future<void> setDataSource(String url, List<String> playUrls, Map<String, String> headers, {LiveRoom? room}) async {
+  Future<void> setDataSource(
+    String url,
+    List<String> playUrls,
+    Map<String, String> headers, {
+    LiveRoom? room,
+  }) async {
+    if (_disposed) return;
     try {
       _loadingSubject.add(true);
       if (_player.state != FijkState.idle) {
         await _player.reset();
+        if (_disposed) return;
       }
       final SettingsService settings = Get.find<SettingsService>();
-      await FijkHelper.setFijkOption(_player, enableCodec: settings.enableCodec.value, headers: headers);
+      await FijkHelper.setFijkOption(
+        _player,
+        enableCodec: settings.enableCodec.value,
+        headers: headers,
+      );
+      if (_disposed) return;
       await _player.setDataSource(url, autoPlay: true);
+      if (_disposed) return;
       _stateSubject.add(PlayerState.ready);
       await setVolume(1.0);
+      if (_disposed) return;
     } catch (e, s) {
+      if (_disposed) return;
       final exception = PlayerException(
         message: 'Fijk setDataSource failed',
         type: PlayerErrorType.source,
@@ -143,7 +161,7 @@ class FijkAdapter implements UnifiedPlayer {
       _safeAddError(exception);
       throw exception;
     } finally {
-      _loadingSubject.add(false);
+      if (!_disposed) _loadingSubject.add(false);
     }
   }
 
@@ -154,9 +172,16 @@ class FijkAdapter implements UnifiedPlayer {
       fit: FijkFit.contain,
       fs: false,
       color: Colors.black,
-      panelBuilder: (FijkPlayer fijkPlayer, FijkData fijkData, BuildContext context, Size viewSize, Rect texturePos) {
-        return const SizedBox();
-      },
+      panelBuilder:
+          (
+            FijkPlayer fijkPlayer,
+            FijkData fijkData,
+            BuildContext context,
+            Size viewSize,
+            Rect texturePos,
+          ) {
+            return const SizedBox();
+          },
     );
   }
 

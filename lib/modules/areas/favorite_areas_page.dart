@@ -31,7 +31,10 @@ class FavoriteAreasPage extends GetView<SettingsService> {
               AppStyle.hGap32,
               Text(
                 "关注分区",
-                style: AppStyle.titleStyleWhite.copyWith(fontSize: 36.w, fontWeight: FontWeight.bold),
+                style: AppStyle.titleStyleWhite.copyWith(
+                  fontSize: 36.w,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               AppStyle.hGap24,
               const Spacer(),
@@ -44,20 +47,23 @@ class FavoriteAreasPage extends GetView<SettingsService> {
               () => controller.favoriteAreas.isNotEmpty
                   ? Padding(
                       padding: AppStyle.edgeInsetsA24,
-                      child: GridView.count(
-                        shrinkWrap: true,
+                      child: GridView.builder(
                         padding: AppStyle.edgeInsetsV8,
-                        physics: const NeverScrollableScrollPhysics(),
-                        crossAxisCount: 8,
-                        crossAxisSpacing: 36.w,
-                        mainAxisSpacing: 36.w,
-                        children: List.generate(
-                          controller.favoriteAreas.length,
-                          (index) => buildSubCategory(controller.favoriteAreas[index]),
-                        ).toList(),
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 8,
+                          crossAxisSpacing: 36.w,
+                          mainAxisSpacing: 36.w,
+                        ),
+                        itemCount: controller.favoriteAreas.length,
+                        itemBuilder: (_, index) =>
+                            buildSubCategory(controller.favoriteAreas[index]),
                       ),
                     )
-                  : EmptyView(icon: Icons.area_chart_outlined, title: S.of(context).empty_areas_title, subtitle: ''),
+                  : EmptyView(
+                      icon: Icons.area_chart_outlined,
+                      title: S.of(context).empty_areas_title,
+                      subtitle: '',
+                    ),
             ),
           ),
           AppStyle.vGap24,
@@ -86,7 +92,10 @@ class FavoriteAreasPage extends GetView<SettingsService> {
     return HighlightWidget(
       focusNode: item.focusNode,
       onTap: () {
-        AppNavigator.toCategoryDetail(site: Sites.of(item.platform!), category: item);
+        AppNavigator.toCategoryDetail(
+          site: Sites.of(item.platform!),
+          category: item,
+        );
       },
       onLongTap: () {
         handleLiveArea(item);
@@ -99,16 +108,24 @@ class FavoriteAreasPage extends GetView<SettingsService> {
           Container(
             width: 64.w,
             height: 64.w,
-            decoration: BoxDecoration(borderRadius: BorderRadius.circular(16.w)),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16.w),
+            ),
             child: CachedNetworkImage(
               imageUrl: item.areaPic!,
               cacheManager: CustomCacheManager.instance,
+              memCacheWidth: (128.w).round(),
+              memCacheHeight: (128.w).round(),
+              maxWidthDiskCache: (256.w).round(),
+              maxHeightDiskCache: (256.w).round(),
               fit: BoxFit.fill,
               errorWidget: (context, error, stackTrace) => Center(
                 child: Icon(
                   Icons.live_tv_rounded,
                   size: 38,
-                  color: item.focusNode.isFoucsed.value ? Colors.black : Colors.white,
+                  color: item.focusNode.isFoucsed.value
+                      ? Colors.black
+                      : Colors.white,
                 ),
               ),
             ),
@@ -118,7 +135,9 @@ class FavoriteAreasPage extends GetView<SettingsService> {
             item.areaName!,
             maxLines: 1,
             textAlign: TextAlign.center,
-            style: item.focusNode.isFoucsed.value ? AppStyle.textStyleBlack : AppStyle.textStyleWhite,
+            style: item.focusNode.isFoucsed.value
+                ? AppStyle.textStyleBlack
+                : AppStyle.textStyleWhite,
           ),
         ],
       ),

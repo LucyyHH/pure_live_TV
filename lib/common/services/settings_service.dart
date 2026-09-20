@@ -505,7 +505,7 @@ class SettingsService extends GetxController {
 
   // ========== 收藏与历史相关业务方法 ==========
   bool isFavorite(LiveRoom room) {
-    return favoriteRooms.any((element) => element.roomId == room.roomId);
+    return favoriteRooms.any((element) => element.roomId == room.roomId && element.platform == room.platform);
   }
 
   LiveRoom getLiveRoomByRoomId(String roomId, String platform) {
@@ -535,29 +535,39 @@ class SettingsService extends GetxController {
     shieldList.removeAt(value);
   }
 
-  bool removeRoom(LiveRoom room) {
-    if (!favoriteRooms.any((element) => element.roomId == room.roomId)) {
-      return false;
-    }
-    favoriteRooms.remove(room);
-    return true;
-  }
+  bool removeRoom(LiveRoom room) => favoriteRooms.remove(room);
 
-  bool removeHistoryRoom(LiveRoom room) {
-    if (!historyRooms.any((element) => element.roomId == room.roomId)) {
-      return false;
-    }
-    historyRooms.remove(room);
-    return true;
-  }
+  bool removeHistoryRoom(LiveRoom room) => historyRooms.remove(room);
 
   bool updateRoom(LiveRoom room) {
-    int idx = favoriteRooms.indexWhere((element) => element.roomId == room.roomId);
+    int idx = favoriteRooms.indexWhere((element) => element.roomId == room.roomId && element.platform == room.platform);
     updateRoomInHistory(room);
     if (idx == -1) return false;
     favoriteRooms[idx] = room;
-    favoriteRooms.refresh();
     return true;
+  }
+
+  /// Merge only rooms still present and unchanged since the request began.
+  /// Publish each collection once, so subscribers sort/save only once per batch.
+  void mergeRoomDetails(Iterable<LiveRoom> updates, {
+    required List<LiveRoom> expectedFavorites,
+    required List<LiveRoom> expectedHistory,
+  }) {
+    final byId = {for (final room in updates) (room.platform, room.roomId): room};
+    void merge(RxList<LiveRoom> target, List<LiveRoom> snapshot) {
+      final expected = {for (final room in snapshot) (room.platform, room.roomId): room};
+      var changed = false;
+      final next = target.map((room) {
+        final key = (room.platform, room.roomId);
+        final replacement = byId[key];
+        if (replacement == null || identical(replacement, room) || !identical(expected[key], room)) return room;
+        changed = true;
+        return replacement;
+      }).toList();
+      if (changed) target.value = next;
+    }
+    merge(favoriteRooms, expectedFavorites);
+    merge(historyRooms, expectedHistory);
   }
 
   void updateRooms(List<LiveRoom> rooms) {
@@ -565,21 +575,18 @@ class SettingsService extends GetxController {
   }
 
   bool updateRoomInHistory(LiveRoom room) {
-    int idx = historyRooms.indexWhere((element) => element.roomId == room.roomId);
+    int idx = historyRooms.indexWhere((element) => element.roomId == room.roomId && element.platform == room.platform);
     if (idx == -1) return false;
     historyRooms[idx] = room;
     return true;
   }
 
   void addRoomToHistory(LiveRoom room) {
-    if (historyRooms.any((element) => element.roomId == room.roomId)) {
-      historyRooms.remove(room);
-    }
-    updateRoom(room);
-    if (historyRooms.length > 50) {
-      historyRooms.removeRange(0, historyRooms.length - 50);
-    }
-    historyRooms.insert(0, room);
+    final favoriteIndex = favoriteRooms.indexOf(room);
+    if (favoriteIndex != -1) favoriteRooms[favoriteIndex] = room;
+    // Keep the newest 50 records and emit one persistence notification.
+    historyRooms.value = [room, ...historyRooms.where((item) => item != room)]
+        .take(50).toList();
   }
 
   // ========== 分区收藏相关业务方法 ==========

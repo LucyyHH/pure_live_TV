@@ -28,6 +28,7 @@ class HighlightIconButton extends StatelessWidget {
       onTap: onTap,
       autofocus: autofocus,
       selected: selected,
+      useFocus: useFocus,
       child: buildIcon(),
     );
   }
@@ -39,7 +40,9 @@ class HighlightIconButton extends StatelessWidget {
             iconData,
             size: 60.w,
             color: useFocus
-                ? (focusNode.isFoucsed.value || selected ? Colors.white : Colors.black)
+                ? (focusNode.isFoucsed.value || selected
+                      ? Colors.white
+                      : Colors.black)
                 : selected
                 ? Colors.black
                 : Colors.white,

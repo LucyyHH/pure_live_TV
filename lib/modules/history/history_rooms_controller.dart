@@ -1,3 +1,4 @@
+import 'package:pure_live/app/room_focus_nodes.dart';
 import 'package:pure_live/get/get.dart';
 import 'package:pure_live/plugins/utils.dart';
 import 'package:pure_live/app/app_focus_node.dart';
@@ -5,28 +6,30 @@ import 'package:pure_live/common/models/live_room.dart';
 import 'package:pure_live/common/base/base_controller.dart';
 
 class HistoryPageController extends BasePageController<LiveRoom> {
+  final backFocusNode = AppFocusNode();
+  final clearFocusNode = AppFocusNode();
   var currentNodeIndex = 1.obs;
   // button列表再加上设置最近观看
-  List<AppFocusNode> focusNodes = [];
+  final roomFocusNodes = RoomFocusNodes();
 
   @override
   void onInit() {
-    refreshData();
     super.onInit();
     stopLoadMore.value = false;
-    list.addListener(() {
-      if (list.isNotEmpty) {
-        // 直播间
-        focusNodes = [];
-        for (var i = 0; i < list.length; i++) {
-          focusNodes.add(AppFocusNode());
-        }
-      }
-    });
+    refreshData();
+  }
+
+  @override
+  void onClose() {
+    roomFocusNodes.dispose();
+    backFocusNode.dispose();
+    clearFocusNode.dispose();
+    super.onClose();
   }
 
   void clean() async {
     settingsService.historyRooms.value = [];
+    roomFocusNodes.retainRooms(const []);
     list.value = [];
   }
 
@@ -42,6 +45,7 @@ class HistoryPageController extends BasePageController<LiveRoom> {
   @override
   Future<List<LiveRoom>> getData(int page, int pageSize) async {
     final rooms = settingsService.historyRooms.toList();
+    roomFocusNodes.retainRooms(rooms);
     return rooms;
   }
 }

@@ -1,9 +1,9 @@
+import 'package:pure_live/common/widgets/room_grid_delegate.dart';
 import 'package:lottie/lottie.dart';
 import 'package:pure_live/common/index.dart';
 import 'package:pure_live/app/app_focus_node.dart';
 import 'package:pure_live/modules/search/search_room_controller.dart';
 import 'package:pure_live/common/widgets/button/highlight_button.dart';
-import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 
 class SearchRoomPage extends GetView<SearchRoomController> {
   const SearchRoomPage({super.key});
@@ -29,7 +29,10 @@ class SearchRoomPage extends GetView<SearchRoomController> {
               AppStyle.hGap32,
               Text(
                 "搜索：${controller.keyword}",
-                style: AppStyle.titleStyleWhite.copyWith(fontSize: 36.w, fontWeight: FontWeight.bold),
+                style: AppStyle.titleStyleWhite.copyWith(
+                  fontSize: 36.w,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               AppStyle.hGap24,
               const Spacer(),
@@ -39,7 +42,10 @@ class SearchRoomPage extends GetView<SearchRoomController> {
                   child: SizedBox(
                     width: 48.w,
                     height: 48.w,
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 4.w),
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                      strokeWidth: 4.w,
+                    ),
                   ),
                 ),
               ),
@@ -63,9 +69,15 @@ class SearchRoomPage extends GetView<SearchRoomController> {
               Sites().availableSites().length,
               (index) => Obx(
                 () => HighlightButton(
-                  icon: Image.asset(Sites().availableSites()[index].logo, width: 48.w, height: 48.w),
+                  icon: Image.asset(
+                    Sites().availableSites()[index].logo,
+                    width: 48.w,
+                    height: 48.w,
+                  ),
                   text: Sites().availableSites()[index].name,
-                  selected: controller.siteId.value == Sites().availableSites()[index].id,
+                  selected:
+                      controller.siteId.value ==
+                      Sites().availableSites()[index].id,
                   focusNode: controller.focusNodes[index + 1],
                   onTap: () {
                     controller.setSite(Sites().availableSites()[index].id);
@@ -78,23 +90,18 @@ class SearchRoomPage extends GetView<SearchRoomController> {
           Expanded(
             child: Obx(
               () => Sites().availableSites().isNotEmpty
-                  ? MasonryGridView.count(
+                  ? GridView.builder(
                       padding: AppStyle.edgeInsetsA48,
                       itemCount: controller.list.length,
-                      crossAxisCount: 5,
-                      crossAxisSpacing: 24.w,
-                      mainAxisSpacing: 48.w,
+                      gridDelegate: RoomGridDelegate(
+                        crossAxisSpacing: 24.w,
+                        mainAxisSpacing: 48.w,
+                      ),
                       controller: controller.scrollController,
                       itemBuilder: (_, i) {
-                        var item = controller.list[i];
-                        if (i == 0) {
-                          Future.delayed(Duration.zero, () {
-                            if (controller.currentPage == 2) {
-                              item.focusNode.requestFocus();
-                            }
-                          });
-                        }
+                        final item = controller.list[i];
                         return RoomCard(
+                          key: ValueKey('${item.platform}-${item.roomId}'),
                           room: item,
                           dense: true,
                           focusNode: item.focusNode,
@@ -106,9 +113,18 @@ class SearchRoomPage extends GetView<SearchRoomController> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          LottieBuilder.asset('assets/lotties/empty.json', width: 160.w, height: 160.w, repeat: false),
+                          LottieBuilder.asset(
+                            'assets/lotties/empty.json',
+                            width: 160.w,
+                            height: 160.w,
+                            repeat: false,
+                          ),
                           AppStyle.vGap24,
-                          Text("暂无搜索类目\n请打开设置展示平台", textAlign: TextAlign.center, style: AppStyle.textStyleWhite),
+                          Text(
+                            "暂无搜索类目\n请打开设置展示平台",
+                            textAlign: TextAlign.center,
+                            style: AppStyle.textStyleWhite,
+                          ),
                         ],
                       ),
                     ),

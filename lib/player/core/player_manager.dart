@@ -9,7 +9,9 @@ import 'engine_fallback_manager.dart';
 import '../models/player_exception.dart';
 import '../models/player_error_type.dart';
 import 'package:rxdart/rxdart.dart' hide Rx;
-import 'package:pure_live/common/index.dart';
+import 'package:flutter/material.dart';
+import 'package:pure_live/get/get.dart';
+import 'package:pure_live/common/models/live_room.dart';
 import '../interface/unified_player_interface.dart';
 
 class PlayerManager {
@@ -20,11 +22,20 @@ class PlayerManager {
   final PreloadPlayerManager preloadManager;
 
   final LineFallbackManager lineManager;
+  final PlayerEngine Function() preferredEngine;
+  final bool Function() hardStopOnExit;
+  _PlaybackSession _session = _PlaybackSession();
+  Future<void>? _closeFuture;
+  bool _active(_PlaybackSession session) =>
+      !_disposed && identical(session, _session) && !session.cancelled;
+
   PlayerManager({
     required this.playerPool,
     required this.fallbackManager,
     required this.preloadManager,
     required this.lineManager,
+    required this.preferredEngine,
+    required this.hardStopOnExit,
   });
 
   // =========================
@@ -110,7 +121,8 @@ class PlayerManager {
 
   UnifiedPlayer? get currentPlayer => _currentPlayer;
 
-  PlayerEngine get currentEngine => _runtimeEngine ?? _defaultEngine ?? PlayerEngine.mediaKit;
+  PlayerEngine get currentEngine =>
+      _runtimeEngine ?? _defaultEngine ?? PlayerEngine.mediaKit;
 
   Stream<PlayerState> get onStateChanged => _stateSubject.stream;
 
@@ -147,6 +159,8 @@ class PlayerManager {
   Future<void> initialize({PlayerEngine engine = PlayerEngine.mediaKit}) async {
     if (_disposed) return;
 
+    final session = _session;
+    if (!_active(session)) return;
     _stateSubject.add(PlayerState.initializing);
 
     try {
@@ -154,12 +168,15 @@ class PlayerManager {
 
       _runtimeEngine = engine;
 
-      _currentPlayer = await playerPool.getPlayer(engine);
-
-      await _bindPlayerStreams(_currentPlayer!);
+      final player = await session.wait(playerPool.getPlayer(engine));
+      if (!_active(session)) return;
+      _currentPlayer = player;
+      await _bindPlayerStreams(player);
+      if (!_active(session)) return;
       isInitialized.value = true;
       _stateSubject.add(PlayerState.initialized);
     } catch (e, s) {
+      if (!_active(session)) return;
       hasError.value = true;
 
       final exception = PlayerException(
@@ -181,56 +198,58 @@ class PlayerManager {
   // play
   // =========================
 
-  Future<void> play(String url, List<String> playUrls, Map<String, String> headers, {LiveRoom? room}) async {
+  Future<void> play(
+    String url,
+    List<String> playUrls,
+    Map<String, String> headers, {
+    LiveRoom? room,
+  }) async {
     if (_disposed) return;
-    if (room?.roomId != currentFloatRoom?.roomId) {
-      lineManager.reset();
-    }
-    if (_currentPlayer == null || _runtimeEngine == null) {
-      final settings = Get.find<SettingsService>();
-      _defaultEngine = PlayerEngine.values[settings.videoPlayerIndex.value];
-      _runtimeEngine = _defaultEngine;
-      await initialize(engine: _defaultEngine!);
-    } else if (_runtimeEngine != _defaultEngine && !_isSwitchingDueToFallback) {
-      await switchEngine(_defaultEngine!, isManual: false);
-    }
-
-    final player = _currentPlayer;
-
-    if (player == null) {
-      throw PlayerException(message: 'Current player is null', type: PlayerErrorType.lifecycle);
-    }
-
-    _currentUrl = url;
-
-    _currentPlayUrls = playUrls;
-
-    _currentHeaders = headers;
-
-    currentFloatRoom = room;
-
-    hasError.value = false;
-
+    if (_closeFuture != null) await _closeFuture;
+    if (_disposed) return;
+    if (_session.cancelled) _session = _PlaybackSession();
+    final session = _session;
+    session.preparing++;
     try {
+      if (room != currentFloatRoom) lineManager.reset();
+      _defaultEngine ??= preferredEngine();
+      if (_currentPlayer == null || _runtimeEngine == null) {
+        await initialize(engine: _defaultEngine!);
+      } else if (_runtimeEngine != _defaultEngine &&
+          !_isSwitchingDueToFallback) {
+        await switchEngine(_defaultEngine!, isManual: false);
+      }
+      if (!_active(session)) return;
+      final player = _currentPlayer;
+      if (player == null) throw StateError('Current player is null');
+      _currentUrl = url;
+      _currentPlayUrls = playUrls;
+      _currentHeaders = headers;
+      currentFloatRoom = room;
+      hasError.value = false;
       _stateSubject.add(PlayerState.preparing);
-      await player.setDataSource(url, playUrls, headers, room: room);
-
-      videoKey.value = ValueKey("video_${DateTime.now().millisecondsSinceEpoch}");
-
+      await session.wait(
+        player.setDataSource(url, playUrls, headers, room: room),
+      );
+      if (!_active(session)) return;
+      videoKey.value = ValueKey(
+        "video_${DateTime.now().millisecondsSinceEpoch}",
+      );
       _stateSubject.add(PlayerState.ready);
-    } on PlayerException catch (e) {
-      if (!_isHandlingError) {
-        await _handleError(e);
-      }
-    } catch (e, s) {
-      log(e.toString());
-      final exception = PlayerException(message: 'Play failed', type: PlayerErrorType.unknown, error: e, stackTrace: s);
-
-      if (!_isHandlingError) {
-        await _handleError(exception);
-      }
+    } catch (error, stack) {
+      if (!_active(session)) return;
+      final exception = error is PlayerException
+          ? error
+          : PlayerException(
+              message: 'Play failed',
+              type: PlayerErrorType.unknown,
+              error: error,
+              stackTrace: stack,
+            );
+      if (!_isHandlingError) await _handleError(exception);
     } finally {
-      _isSwitchingDueToFallback = false;
+      session.preparing--;
+      if (_active(session)) _isSwitchingDueToFallback = false;
     }
   }
 
@@ -240,15 +259,24 @@ class PlayerManager {
 
   Future<void> replay() async {
     if (_currentUrl == null) return;
-    await play(_currentUrl!, _currentPlayUrls, _currentHeaders, room: currentFloatRoom);
+    await play(
+      _currentUrl!,
+      _currentPlayUrls,
+      _currentHeaders,
+      room: currentFloatRoom,
+    );
   }
 
   // =========================
   // switch engine
   // =========================
 
-  Future<void> switchEngine(PlayerEngine engine, {bool isManual = false}) async {
-    if (_disposed) return;
+  Future<void> switchEngine(
+    PlayerEngine engine, {
+    bool isManual = false,
+  }) async {
+    final session = _session;
+    if (!_active(session)) return;
 
     if (_runtimeEngine == engine && _currentPlayer != null) {
       return;
@@ -261,7 +289,9 @@ class PlayerManager {
 
       await _clearSubscriptions();
 
-      final newPlayer = await playerPool.getPlayer(engine);
+      if (!_active(session)) return;
+      final newPlayer = await session.wait(playerPool.getPlayer(engine));
+      if (!_active(session)) return;
 
       _currentPlayer = newPlayer;
 
@@ -272,12 +302,17 @@ class PlayerManager {
       }
 
       await _bindPlayerStreams(newPlayer);
+      if (!_active(session)) return;
       if (oldPlayer != null && oldEngine != null) {
         await _safeDestroyPlayer(oldPlayer, oldEngine);
       }
 
-      videoKey.value = ValueKey("video_${DateTime.now().millisecondsSinceEpoch}");
+      if (!_active(session)) return;
+      videoKey.value = ValueKey(
+        "video_${DateTime.now().millisecondsSinceEpoch}",
+      );
     } catch (e, s) {
+      if (!_active(session)) return;
       final exception = PlayerException(
         message: 'Switch engine failed',
         type: PlayerErrorType.lifecycle,
@@ -291,11 +326,12 @@ class PlayerManager {
     }
   }
 
-  Future<void> _safeDestroyPlayer(UnifiedPlayer player, PlayerEngine engine) async {
+  Future<void> _safeDestroyPlayer(
+    UnifiedPlayer player,
+    PlayerEngine engine,
+  ) async {
     try {
-      await player.hardDispose();
-
-      await playerPool.removeFromCache(engine);
+      await playerPool.removePlayer(engine, player);
     } catch (e, s) {
       log("destroy player error: $e", stackTrace: s);
     }
@@ -305,7 +341,11 @@ class PlayerManager {
   // preload
   // =========================
 
-  Future<void> preload(String url, List<String> playUrls, Map<String, String> headers) async {
+  Future<void> preload(
+    String url,
+    List<String> playUrls,
+    Map<String, String> headers,
+  ) async {
     if (_disposed) return;
 
     final standby = await playerPool.getPlayer(_runtimeEngine!);
@@ -375,7 +415,11 @@ class PlayerManager {
     videoFitIndex.value = index;
   }
 
-  Widget getVideoWidget(int fitIndex, {Widget? controls, required List<BoxFit> fitList}) {
+  Widget getVideoWidget(
+    int fitIndex, {
+    Widget? controls,
+    required List<BoxFit> fitList,
+  }) {
     return Container(
       color: Colors.black,
       padding: const EdgeInsets.all(0),
@@ -407,7 +451,11 @@ class PlayerManager {
                             // 动态使用视频的真实宽高
                             final vW = snapshot.data?[0]?.toDouble() ?? 1920.0;
                             final vH = snapshot.data?[1]?.toDouble() ?? 1080.0;
-                            return SizedBox(width: vW, height: vH, child: _currentPlayer!.getVideoWidget());
+                            return SizedBox(
+                              width: vW,
+                              height: vH,
+                              child: _currentPlayer!.getVideoWidget(),
+                            );
                           },
                         ),
                       ),
@@ -427,7 +475,9 @@ class PlayerManager {
   Widget _buildPlaceholder() {
     return Container(
       color: Colors.black,
-      child: const Center(child: CircularProgressIndicator(strokeWidth: 4, color: Colors.white70)),
+      child: const Center(
+        child: CircularProgressIndicator(strokeWidth: 4, color: Colors.white70),
+      ),
     );
   }
 
@@ -435,39 +485,59 @@ class PlayerManager {
   // close
   // =========================
 
-  Future<void> close() async {
-    final settings = Get.find<SettingsService>();
-    settings.useHardStopOnExit.value ? await hardDispose() : await softStop();
-  }
+  Future<void> close() => _closeFuture ??= _close().whenComplete(() {
+    _closeFuture = null;
+  });
 
-  Future<void> softStop() async {
+  Future<void> _close() async {
+    final session = _session;
+    final player = _currentPlayer;
+    final hard =
+        hardStopOnExit() ||
+        session.preparing > 0 ||
+        _isHandlingError ||
+        _isSwitchingDueToFallback ||
+        player == null;
+    session.cancel();
+    _currentPlayer = null;
+    _runtimeEngine = null;
+    _currentUrl = null;
+    _isHandlingError = false;
+    _isSwitchingDueToFallback = false;
     lineManager.reset();
+    isInitialized.value = false;
+    _stateSubject.add(PlayerState.idle);
+    _playingSubject.add(false);
+    _loadingSubject.add(false);
+    final subscriptions = _clearSubscriptions();
+    // disposeAll removes cache entries before returning its disposal Future.
+    final cleanup = hard ? playerPool.disposeAll() : player.softStop();
     try {
-      if (_stateSubject.value == PlayerState.error) {
-        await hardDispose();
-
-        return;
-      }
-
-      await _currentPlayer?.softStop();
-
-      _stateSubject.add(PlayerState.idle);
-
-      _playingSubject.add(false);
-    } catch (e) {
-      await hardDispose();
+      await Future.wait([
+        subscriptions,
+        cleanup,
+      ]).timeout(const Duration(seconds: 2));
+    } on TimeoutException {
+      // A timed-out soft stop must also be removed before a later room can reuse it.
+      unawaited(
+        playerPool.disposeAll().catchError((Object error) {
+          log('Background player disposal failed: $error');
+        }),
+      );
+      log(
+        'Player disposal continues in background after detaching the old session',
+      );
     }
   }
+
+  Future<void> softStop() => close();
 
   Future<void> hardDispose() async {
-    lineManager.reset();
-    await _clearSubscriptions();
-    if (_runtimeEngine != null) {
-      await playerPool.removeFromCache(_runtimeEngine!);
-    }
+    _session.cancel();
     _currentPlayer = null;
     _runtimeEngine = null;
     isInitialized.value = false;
+    await Future.wait([_clearSubscriptions(), playerPool.disposeAll()]);
   }
 
   // =========================
@@ -482,7 +552,8 @@ class PlayerManager {
   // error
   // =========================
   Future<void> _handleError(PlayerException error) async {
-    if (_disposed) return;
+    final session = _session;
+    if (!_active(session)) return;
     if (_isHandlingError) {
       log("skip duplicated error handling: ${error.message}");
       return;
@@ -496,7 +567,8 @@ class PlayerManager {
 
       bool lineSwitched = false;
 
-      if ((error.type == PlayerErrorType.network || error.type == PlayerErrorType.source) &&
+      if ((error.type == PlayerErrorType.network ||
+              error.type == PlayerErrorType.source) &&
           _currentPlayUrls.length > 1) {
         lineManager.markFailed(_currentUrl!);
 
@@ -510,9 +582,15 @@ class PlayerManager {
 
             log("switch line => $nextLine");
 
-            await Future.delayed(const Duration(seconds: 2));
+            await session.wait(Future.delayed(const Duration(seconds: 2)));
+            if (!_active(session)) return;
 
-            await play(nextLine, _currentPlayUrls, _currentHeaders, room: currentFloatRoom);
+            await play(
+              nextLine,
+              _currentPlayUrls,
+              _currentHeaders,
+              room: currentFloatRoom,
+            );
 
             return;
           }
@@ -524,11 +602,17 @@ class PlayerManager {
       // =========================
 
       if (!lineSwitched && fallbackManager.shouldFallback(error)) {
-        final nextEngine = await fallbackManager.fallback(_runtimeEngine!, error);
+        final nextEngine = await fallbackManager.fallback(
+          _runtimeEngine!,
+          error,
+        );
+        if (!_active(session)) return;
 
         // 防止重复切换
         if (nextEngine == _runtimeEngine) {
-          log("skip fallback: nextEngine(${nextEngine.name}) == currentEngine(${_runtimeEngine?.name})");
+          log(
+            "skip fallback: nextEngine(${nextEngine.name}) == currentEngine(${_runtimeEngine?.name})",
+          );
           return;
         }
 
@@ -539,20 +623,23 @@ class PlayerManager {
         _isSwitchingDueToFallback = true;
 
         // 给底层播放器一点释放时间
-        await Future.delayed(const Duration(milliseconds: 1200));
+        await session.wait(Future.delayed(const Duration(milliseconds: 1200)));
+        if (!_active(session)) return;
 
         await switchEngine(nextEngine, isManual: false);
+        if (!_active(session)) return;
 
-        await Future.delayed(const Duration(milliseconds: 500));
+        await session.wait(Future.delayed(const Duration(milliseconds: 500)));
+        if (!_active(session)) return;
 
         await replay();
 
         return;
       }
     } catch (e, s) {
-      log("_handleError failed: $e", stackTrace: s);
+      if (_active(session)) log("_handleError failed: $e", stackTrace: s);
     } finally {
-      _isHandlingError = false;
+      if (_active(session)) _isHandlingError = false;
     }
   }
   // =========================
@@ -560,9 +647,13 @@ class PlayerManager {
   // =========================
 
   Future<void> _bindPlayerStreams(UnifiedPlayer player) async {
+    final session = _session;
     await _clearSubscriptions();
+    bool active() => _active(session) && identical(player, _currentPlayer);
+    if (!active()) return;
     _subscriptions.add(
       player.onPlaying.listen((event) async {
+        if (!active()) return;
         _playingSubject.add(event);
         if (event) {
           hasError.value = false;
@@ -578,6 +669,7 @@ class PlayerManager {
 
     _subscriptions.add(
       player.onLoading.listen((event) {
+        if (!active()) return;
         _loadingSubject.add(event);
         if (event && _stateSubject.value != PlayerState.buffering) {
           _stateSubject.add(PlayerState.buffering);
@@ -587,18 +679,21 @@ class PlayerManager {
 
     _subscriptions.add(
       player.onComplete.listen((event) {
+        if (!active()) return;
         _completeSubject.add(event);
       }),
     );
 
     _subscriptions.add(
       player.onStateChanged.listen((event) {
+        if (!active()) return;
         _stateSubject.add(event);
       }),
     );
 
     _subscriptions.add(
       player.onError.listen((error) {
+        if (!active()) return;
         if (!_isHandlingError) {
           _handleError(error);
         }
@@ -607,12 +702,14 @@ class PlayerManager {
 
     _subscriptions.add(
       player.width.listen((event) {
+        if (!active()) return;
         _widthSubject.add(event);
       }),
     );
 
     _subscriptions.add(
       player.height.listen((event) {
+        if (!active()) return;
         _heightSubject.add(event);
       }),
     );
@@ -623,6 +720,7 @@ class PlayerManager {
         height.where((h) => h != null && h > 0),
         (w, h) => h! >= w!,
       ).distinct().listen((event) {
+        if (!active()) return;
         isVerticalVideo.value = event;
       }),
     );
@@ -634,10 +732,9 @@ class PlayerManager {
 
   Future<void> _clearSubscriptions() async {
     if (_subscriptions.isEmpty) return;
-    for (final item in _subscriptions.toList()) {
-      await item.cancel();
-    }
+    final subscriptions = _subscriptions.toList();
     _subscriptions.clear();
+    await Future.wait(subscriptions.map((item) => item.cancel()));
   }
 
   // =========================
@@ -648,6 +745,7 @@ class PlayerManager {
     if (_disposed) return;
 
     _disposed = true;
+    _session.cancel();
 
     _hideTimer?.cancel();
 
@@ -665,4 +763,18 @@ class PlayerManager {
       _heightSubject.close(),
     ]);
   }
+}
+
+class _PlaybackSession {
+  final Completer<void> _cancelled = Completer<void>();
+  int preparing = 0;
+  bool get cancelled => _cancelled.isCompleted;
+  void cancel() {
+    if (!cancelled) _cancelled.complete();
+  }
+
+  Future<T> wait<T>(Future<T> operation) => Future.any([
+    operation,
+    _cancelled.future.then<T>((_) => throw StateError('Playback cancelled')),
+  ]);
 }

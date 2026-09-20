@@ -1,4 +1,5 @@
 import 'dart:ui' as ui;
+import '../utils/utils.dart';
 import 'package:pure_live/pkg/canvas_danmaku/models/danmaku_content_item.dart';
 
 class DanmakuItem {
@@ -9,7 +10,7 @@ class DanmakuItem {
   final int creationTime;
 
   /// 弹幕宽度
-  final double width;
+  double width;
 
   /// 弹幕高度
   final double height;
@@ -28,6 +29,7 @@ class DanmakuItem {
   ui.Paragraph? strokeParagraph;
 
   double? cachedWidth;
+  CachedDanmakuParagraph? layout;
 
   DanmakuItem({
     required this.content,
@@ -40,5 +42,6 @@ class DanmakuItem {
     this.strokeParagraph,
     this.lastDrawTick,
     this.cachedWidth,
+    this.layout,
   });
 }

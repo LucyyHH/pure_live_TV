@@ -1,3 +1,4 @@
+import 'package:pure_live/app/room_focus_nodes.dart';
 import 'dart:async';
 import 'package:pool/pool.dart';
 import 'package:pure_live/app/utils.dart';
@@ -7,6 +8,10 @@ import 'package:pure_live/app/app_focus_node.dart';
 class FavoriteController extends GetxController {
   final SettingsService settings = Get.find<SettingsService>();
 
+  final roomFocusNodes = RoomFocusNodes();
+  final backFocusNode = AppFocusNode();
+  final refreshFocusNode = AppFocusNode();
+
   final tabBottomIndex = 0.obs;
 
   final onlineRoomsNodes = AppFocusNode();
@@ -14,6 +19,9 @@ class FavoriteController extends GetxController {
   final offlineRoomsNodes = AppFocusNode();
 
   bool isFirstLoad = true;
+  StreamSubscription<List<LiveRoom>>? _favoriteRoomsSubscription;
+  Future<bool>? _refreshFuture;
+  bool _isClosed = false;
 
   var loading = true.obs;
 
@@ -22,8 +30,11 @@ class FavoriteController extends GetxController {
     super.onInit();
     onlineRoomsNodes.requestFocus();
     syncRooms();
+    loading.value = false;
 
-    settings.favoriteRooms.listen((rooms) => syncRooms());
+    _favoriteRoomsSubscription = settings.favoriteRooms.listen(
+      (_) => syncRooms(),
+    );
 
     if (settings.autoRefreshFavorite.value) {
       int interval = settings.autoRefreshInterval.value;
@@ -42,22 +53,36 @@ class FavoriteController extends GetxController {
     }
   }
 
-  final onlineRooms = [].obs;
-  final offlineRooms = [].obs;
+  final onlineRooms = <LiveRoom>[].obs;
+  final offlineRooms = <LiveRoom>[].obs;
 
   void syncRooms() {
-    loading.value = true;
-    onlineRooms.clear();
-    offlineRooms.clear();
-    onlineRooms.addAll(settings.favoriteRooms.where((room) => room.liveStatus == LiveStatus.live));
-    offlineRooms.addAll(settings.favoriteRooms.where((room) => room.liveStatus != LiveStatus.live));
-    for (var room in onlineRooms) {
-      if (int.tryParse(room.watching!) == null) {
-        room.watching = "0";
-      }
+    if (_isClosed) return;
+    roomFocusNodes.retainRooms(settings.favoriteRooms);
+    final online = <LiveRoom>[];
+    final offline = <LiveRoom>[];
+    for (final room in settings.favoriteRooms) {
+      (room.liveStatus == LiveStatus.live ? online : offline).add(room);
     }
-    onlineRooms.sort((a, b) => int.parse(b.watching!).compareTo(int.parse(a.watching!)));
-    loading.value = false;
+    online.sort(
+      (a, b) => (int.tryParse(b.watching ?? '') ?? 0).compareTo(
+        int.tryParse(a.watching ?? '') ?? 0,
+      ),
+    );
+    onlineRooms.value = online;
+    offlineRooms.value = offline;
+  }
+
+  @override
+  void onClose() {
+    _isClosed = true;
+    _favoriteRoomsSubscription?.cancel();
+    roomFocusNodes.dispose();
+    backFocusNode.dispose();
+    refreshFocusNode.dispose();
+    onlineRoomsNodes.dispose();
+    offlineRoomsNodes.dispose();
+    super.onClose();
   }
 
   Future<void> handleFollowLongTap(LiveRoom room) async {
@@ -74,59 +99,57 @@ class FavoriteController extends GetxController {
       }
       settings.addRoom(room);
     }
-    syncRooms();
   }
 
-  Future<bool> onRefresh() async {
-    final Pool refreshPool = Pool(settings.maxConcurrentRefresh.value);
+  Future<bool> onRefresh() {
+    if (_isClosed) return Future.value(false);
+    return _refreshFuture ??= _refreshRooms().whenComplete(() {
+      _refreshFuture = null;
+    });
+  }
+
+  Future<LiveRoom> fetchRoomDetail(LiveRoom room) => Sites.of(
+    room.platform!,
+  ).liveSite.getRoomDetail(roomId: room.roomId!, platform: room.platform!);
+
+  Future<bool> _refreshRooms() async {
+    final concurrency = settings.maxConcurrentRefresh.value;
+    final pool = Pool(concurrency > 0 ? concurrency : 1);
+    final favorites = settings.favoriteRooms.toList();
+    final history = settings.historyRooms.toList();
     loading.value = true;
     try {
-      final rooms = settings.favoriteRooms.value.where((room) {
-        return room.roomId != null && room.roomId!.isNotEmpty && room.platform != null && room.platform!.isNotEmpty;
-      }).toList();
-
-      if (rooms.isEmpty) {
-        debugPrint('没有有效的收藏房间需要刷新');
-        loading.value = false;
-        return false;
-      }
-
-      final List<Future<void>> tasks = rooms.map((room) {
-        return refreshPool.withResource(() async {
-          try {
-            if (room.platform == null || room.roomId == null) {
-              debugPrint('跳过无效房间数据');
-              return;
+      final results = await Future.wait(
+        favorites.map((room) {
+          return pool.withResource<LiveRoom?>(() async {
+            // Queued work must not start after the page has closed.
+            if (_isClosed ||
+                room.roomId == null ||
+                room.roomId!.isEmpty ||
+                room.platform == null ||
+                room.platform!.isEmpty) {
+              return null;
             }
-
-            final liveRoom = await Sites.of(
-              room.platform!,
-            ).liveSite.getRoomDetail(roomId: room.roomId!, platform: room.platform!);
-
-            settings.updateRoom(liveRoom);
-          } catch (e, stack) {
-            debugPrint('================ 刷新失败记录 ================');
-            debugPrint('平台 (Platform): ${room.platform}');
-            debugPrint('房间号 (RoomID): ${room.roomId}');
-            debugPrint('昵称 (Nickname): ${room.nick}');
-            debugPrint('原始标题 (Title): ${room.title}');
-            debugPrint('具体错误类型: $e');
-            debugPrint('堆栈追踪: $stack');
-            debugPrint('============================================');
-          }
-        });
-      }).toList();
-
-      //  并发启动所有任务并等待它们全部执行完毕
-      await Future.wait(tasks);
-    } catch (e) {
-      debugPrint('刷新过程中发生全局错误: $e');
-    } finally {
-      // 4. 数据同步和状态重置
-      syncRooms();
+            try {
+              return await fetchRoomDetail(room);
+            } catch (error) {
+              debugPrint('刷新 ${room.platform}/${room.roomId} 失败: $error');
+              return null;
+            }
+          });
+        }),
+      );
+      if (_isClosed) return false;
+      settings.mergeRoomDetails(
+        results.whereType<LiveRoom>(),
+        expectedFavorites: favorites,
+        expectedHistory: history,
+      );
       isFirstLoad = false;
-      loading.value = false;
+      return results.any((room) => room != null);
+    } finally {
+      await pool.close();
+      if (!_isClosed) loading.value = false;
     }
-    return true;
   }
 }

@@ -1,6 +1,5 @@
 import 'dart:math';
-import 'dart:async';
-import 'dart:ui' as ui;
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/material.dart';
 import 'package:pure_live/pkg/canvas_danmaku/utils/utils.dart';
 import 'package:pure_live/pkg/canvas_danmaku/danmaku_controller.dart';
@@ -13,64 +12,70 @@ class DanmakuScreen extends StatefulWidget {
   final DanmakuController controller;
   final DanmakuOption option;
 
-  const DanmakuScreen({required this.controller, required this.option, super.key});
+  const DanmakuScreen({
+    required this.controller,
+    required this.option,
+    super.key,
+  });
 
   @override
   State<DanmakuScreen> createState() => _DanmakuScreenState();
 }
 
-class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateMixin, WidgetsBindingObserver {
+class _DanmakuScreenState extends State<DanmakuScreen>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
   double _viewWidth = 0;
   double _viewHeight = 0;
   late DanmakuController _controller;
-  late AnimationController _animationController;
-  late AnimationController _staticAnimationController;
+  late Ticker _ticker;
+  final ValueNotifier<int> _repaint = ValueNotifier(0);
   DanmakuOption _option = DanmakuOption();
 
   final Map<double, List<DanmakuItem>> _scrollDanmakuByTrack = {};
   final List<DanmakuItem> _topDanmakuItems = [];
   final List<DanmakuItem> _bottomDanmakuItems = [];
   final List<DanmakuItem> _specialDanmakuItems = [];
-  final List<DanmakuItem> _flattenedScrollDanmakus = [];
   static final List<FontWeight> _fontWeights = FontWeight.values;
   late double _danmakuHeight;
   late int _trackCount;
   final List<double> _trackYPositions = [];
   final _random = Random();
-  final _stopwatch = Stopwatch();
+  int _tick = 0;
+  int _tickerStart = 0;
+  int _lastCleanup = 0;
   bool _running = true;
-
-  int get _tick => _stopwatch.elapsedMilliseconds;
 
   @override
   void initState() {
     super.initState();
     _controller = widget.controller;
     _option = widget.option;
+    _running = _controller.running;
     _controller.option = _option;
     _bindControllerCallbacks();
-    _startTick();
-
-    _animationController = AnimationController(
-      vsync: this,
-      duration: Duration(seconds: _option.duration),
-    )..repeat();
-
-    _staticAnimationController = AnimationController(
-      vsync: this,
-      duration: Duration(seconds: _option.duration),
-    )..repeat();
+    _ticker = createTicker((elapsed) {
+      _tick = _tickerStart + elapsed.inMilliseconds;
+      if (_tick - _lastCleanup >= 250) {
+        _lastCleanup = _tick;
+        _removeExpired();
+      }
+      _repaint.value++;
+      if (!_hasItems) _ticker.stop();
+    });
 
     WidgetsBinding.instance.addObserver(this);
     _calculateTracksGeometry();
   }
 
   void _bindControllerCallbacks() {
-    _controller.onAddDanmaku = addDanmaku;
-    _controller.onUpdateOption = updateOption;
-    _controller.onPause = pause;
-    _controller.onResume = resume;
-    _controller.onClear = clearDanmakus;
+    _controller.bind(
+      owner: this,
+      onAddDanmaku: addDanmaku,
+      onUpdateOption: updateOption,
+      onPause: pause,
+      onResume: resume,
+      onClear: clearDanmakus,
+    );
   }
 
   void _calculateTracksGeometry() {
@@ -82,12 +87,14 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
       textDirection: TextDirection.ltr,
     )..layout();
     _danmakuHeight = textPainter.height;
+    textPainter.dispose();
 
     if (_viewWidth <= 0 || _viewHeight <= 0) return;
 
     final topOffset = _option.topAreaDistance;
     final bottomOffset = _option.bottomAreaDistance;
-    double displayHeight = (_viewHeight - topOffset - bottomOffset) * _option.area;
+    double displayHeight =
+        (_viewHeight - topOffset - bottomOffset) * _option.area;
 
     _trackCount = (displayHeight / _danmakuHeight).floor().clamp(0, 999);
     _trackYPositions.clear();
@@ -100,7 +107,7 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused) {
       pause();
-    } else if (state == AppLifecycleState.resumed) {
+    } else if (state == AppLifecycleState.resumed && _controller.running) {
       resume();
     }
   }
@@ -109,10 +116,10 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
   void dispose() {
     _running = false;
     WidgetsBinding.instance.removeObserver(this);
-    _animationController.dispose();
-    _staticAnimationController.dispose();
-    _stopwatch.stop();
-    _flattenedScrollDanmakus.clear();
+    _controller.detach(this);
+    _ticker.dispose();
+    _repaint.dispose();
+    _disposeSpecialItems();
     super.dispose();
   }
 
@@ -120,8 +127,15 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
   void didUpdateWidget(covariant DanmakuScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (widget.controller != _controller) {
+      _controller.detach(this);
       _controller = widget.controller;
+      if (_controller.running) {
+        resume();
+      } else {
+        pause();
+      }
     }
+    _controller.option = _option;
     _bindControllerCallbacks();
   }
 
@@ -136,11 +150,18 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
             style: TextStyle(
               color: content.color,
               fontSize: content.fontSize,
-              fontWeight: _fontWeights[_option.fontWeight.clamp(0, _fontWeights.length - 1)],
+              fontWeight:
+                  _fontWeights[_option.fontWeight.clamp(
+                    0,
+                    _fontWeights.length - 1,
+                  )],
               shadows: content.hasStroke
                   ? [
                       Shadow(
-                        color: Colors.black.withAlpha((255 * (special.alphaTween?.begin ?? content.color.a)).toInt()),
+                        color: Colors.black.withAlpha(
+                          (255 * (special.alphaTween?.begin ?? content.color.a))
+                              .toInt(),
+                        ),
                         blurRadius: 2,
                       ),
                     ]
@@ -161,24 +182,20 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
           ),
         );
       }
+      _startTick();
       return;
     }
 
-    // 2. 核心性能优化：直接利用新 Utils 计算宽度和高度，内部自带全量缓存！
-    // 预先传入 showStroke 保证计算结果精确包含或排除描边空间
-    final danmakuWidth = Utils.calculateMixedContentWidth(
+    final layout = Utils.layout(
       content,
       _option.fontSize,
       _option.fontWeight,
       _option.showStroke,
     );
-    final danmakuHeight = _danmakuHeight; // 高度直接复用几何初始化的行高，无需重复测算
-
-    // 3. 高性能段落生成：不再使用两个 TextPainter 拆开套用
-    final ui.Paragraph paragraph = Utils.generateParagraph(content, danmakuWidth, _option.fontSize, _option.fontWeight);
-    final ui.Paragraph? strokeParagraph = _option.showStroke
-        ? Utils.generateStrokeParagraph(content, danmakuWidth, _option.fontSize, _option.fontWeight)
-        : null;
+    final danmakuWidth = layout.width;
+    final danmakuHeight = _danmakuHeight;
+    final paragraph = layout.mainParagraph;
+    final strokeParagraph = layout.strokeParagraph;
 
     int idx = 1;
     for (double yPosition in _trackYPositions) {
@@ -195,6 +212,7 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
                   creationTime: _tick,
                   content: content,
                   paragraph: paragraph,
+                  layout: layout,
                   strokeParagraph: strokeParagraph,
                   cachedWidth: danmakuWidth,
                 ),
@@ -202,7 +220,9 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
           break;
         }
         if (content.selfSend && idx == _trackCount) {
-          final targetY = _trackYPositions.isNotEmpty ? _trackYPositions[0] : 0.0;
+          final targetY = _trackYPositions.isNotEmpty
+              ? _trackYPositions[0]
+              : 0.0;
           _scrollDanmakuByTrack
               .putIfAbsent(targetY, () => [])
               .add(
@@ -214,6 +234,7 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
                   creationTime: _tick,
                   content: content,
                   paragraph: paragraph,
+                  layout: layout,
                   strokeParagraph: strokeParagraph,
                   cachedWidth: danmakuWidth,
                 ),
@@ -221,7 +242,8 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
           break;
         }
         if (_option.massiveMode && idx == _trackCount) {
-          final randomY = _trackYPositions[_random.nextInt(_trackYPositions.length)];
+          final randomY =
+              _trackYPositions[_random.nextInt(_trackYPositions.length)];
           _scrollDanmakuByTrack
               .putIfAbsent(randomY, () => [])
               .add(
@@ -233,6 +255,7 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
                   creationTime: _tick,
                   content: content,
                   paragraph: paragraph,
+                  layout: layout,
                   strokeParagraph: strokeParagraph,
                   cachedWidth: danmakuWidth,
                 ),
@@ -252,6 +275,7 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
               creationTime: _tick,
               content: content,
               paragraph: paragraph,
+              layout: layout,
               strokeParagraph: strokeParagraph,
             ),
           );
@@ -270,6 +294,7 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
               creationTime: _tick,
               content: content,
               paragraph: paragraph,
+              layout: layout,
               strokeParagraph: strokeParagraph,
             ),
           );
@@ -279,89 +304,86 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
       idx++;
     }
 
-    if (!_animationController.isAnimating && (_scrollDanmakuByTrack.isNotEmpty || _specialDanmakuItems.isNotEmpty)) {
-      _animationController.repeat();
+    _startTick();
+  }
+
+  bool get _hasItems =>
+      _scrollDanmakuByTrack.isNotEmpty ||
+      _topDanmakuItems.isNotEmpty ||
+      _bottomDanmakuItems.isNotEmpty ||
+      _specialDanmakuItems.isNotEmpty;
+
+  void _startTick() {
+    if (_running && _hasItems && !_ticker.isActive) {
+      _tickerStart = _tick;
+      _ticker.start();
     }
   }
 
   void pause() {
     if (!mounted) return;
-    if (_running) {
-      setState(() {
-        _running = false;
-      });
-      if (_animationController.isAnimating) _animationController.stop();
-      if (_staticAnimationController.isAnimating) _staticAnimationController.stop();
-      if (_stopwatch.isRunning) _stopwatch.stop();
-    }
+    _running = false;
+    _ticker.stop();
   }
 
   void resume() {
     if (!mounted) return;
-    if (!_running) {
-      setState(() {
-        _running = true;
-      });
-      if (!_animationController.isAnimating) {
-        _animationController.repeat();
-        _staticAnimationController.repeat();
-        _startTick();
-      }
-    }
+    _running = true;
+    _startTick();
   }
 
   void updateOption(DanmakuOption option) {
-    bool needRestart = false;
-    bool needClearParagraph = option.fontSize != _option.fontSize;
-
-    if (_animationController.isAnimating) {
-      _animationController.stop();
-      _staticAnimationController.stop();
-      needRestart = true;
-    }
-
-    if (option.hideScroll && !_option.hideScroll) _scrollDanmakuByTrack.clear();
-    if (option.hideTop && !_option.hideTop) _topDanmakuItems.clear();
-    if (option.hideBottom && !_option.hideBottom) _bottomDanmakuItems.clear();
-
+    final layoutChanged =
+        option.fontSize != _option.fontSize ||
+        option.fontWeight != _option.fontWeight ||
+        option.showStroke != _option.showStroke;
     _option = option;
-    _controller.option = _option;
+    _controller.option = option;
+    if (option.hideScroll) _scrollDanmakuByTrack.clear();
+    if (option.hideTop) _topDanmakuItems.clear();
+    if (option.hideBottom) _bottomDanmakuItems.clear();
+    if (option.hideSpecial) _disposeSpecialItems();
     _calculateTracksGeometry();
-
-    if (needClearParagraph) {
-      _scrollDanmakuByTrack.forEach((trackY, items) {
-        for (var item in items) {
-          item.paragraph = null;
-          item.strokeParagraph = null;
-        }
-      });
-      for (var item in _topDanmakuItems) {
-        item.paragraph = null;
-        item.strokeParagraph = null;
-      }
-      for (var item in _bottomDanmakuItems) {
-        item.paragraph = null;
-        item.strokeParagraph = null;
+    if (layoutChanged) {
+      for (final item in [
+        ..._scrollDanmakuByTrack.values.expand((items) => items),
+        ..._topDanmakuItems,
+        ..._bottomDanmakuItems,
+      ]) {
+        final layout = Utils.layout(
+          item.content,
+          option.fontSize,
+          option.fontWeight,
+          option.showStroke,
+        );
+        item.layout = layout;
+        item.width = layout.width;
+        item.cachedWidth = layout.width;
+        item.paragraph = layout.mainParagraph;
+        item.strokeParagraph = layout.strokeParagraph;
       }
     }
-
-    if (needRestart) {
-      _animationController.repeat();
-      _staticAnimationController.repeat();
-    }
+    _removeExpired();
+    if (!_hasItems) _ticker.stop();
+    _startTick();
     if (mounted) setState(() {});
+  }
+
+  void _disposeSpecialItems() {
+    for (final item in _specialDanmakuItems) {
+      (item.content as SpecialDanmakuContentItem).painterCache?.dispose();
+    }
+    _specialDanmakuItems.clear();
   }
 
   void clearDanmakus() {
     if (!mounted) return;
-    setState(() {
-      _scrollDanmakuByTrack.clear();
-      _topDanmakuItems.clear();
-      _bottomDanmakuItems.clear();
-      _specialDanmakuItems.clear();
-    });
-    _animationController.stop();
-    _staticAnimationController.stop();
+    _scrollDanmakuByTrack.clear();
+    _topDanmakuItems.clear();
+    _bottomDanmakuItems.clear();
+    _disposeSpecialItems();
+    _ticker.stop();
+    _repaint.value++;
   }
 
   bool _scrollCanAddToTrack(double yPosition, double newDanmakuWidth) {
@@ -372,13 +394,15 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
 
     final int elapsedTime = _tick - item.creationTime;
     final double timeProgress = elapsedTime / (_option.duration * 1000);
-    final double currentX = _viewWidth + ((-item.width) - _viewWidth) * timeProgress;
+    final double currentX =
+        _viewWidth + ((-item.width) - _viewWidth) * timeProgress;
 
     final existingEndPosition = currentX + item.width;
 
     if (_viewWidth - existingEndPosition < 0) return false;
     if (item.width < newDanmakuWidth) {
-      if ((1 - ((_viewWidth - currentX) / (item.width + _viewWidth))) > (_viewWidth / (_viewWidth + newDanmakuWidth))) {
+      if ((1 - ((_viewWidth - currentX) / (item.width + _viewWidth))) >
+          (_viewWidth / (_viewWidth + newDanmakuWidth))) {
         return false;
       }
     }
@@ -399,88 +423,54 @@ class _DanmakuScreenState extends State<DanmakuScreen> with TickerProviderStateM
     return true;
   }
 
-  void _startTick() async {
-    _stopwatch.start();
-    final staticDuration = _option.duration * 1000;
-
-    while (_running && mounted) {
-      await Future.delayed(const Duration(milliseconds: 16));
-
-      final List<double> tracksToRemove = [];
-
-      _scrollDanmakuByTrack.forEach((trackY, items) {
-        items.removeWhere((item) => item.xPosition + item.width < 0);
-        if (items.isEmpty) tracksToRemove.add(trackY);
-      });
-
-      for (final trackY in tracksToRemove) {
-        _scrollDanmakuByTrack.remove(trackY);
-      }
-
-      final List<DanmakuItem> tempFlattened = [];
-      _scrollDanmakuByTrack.forEach((_, items) {
-        tempFlattened.addAll(items);
-      });
-
-      _flattenedScrollDanmakus.clear();
-      _flattenedScrollDanmakus.addAll(tempFlattened);
-
-      _topDanmakuItems.removeWhere((item) => (_tick - item.creationTime) >= staticDuration);
-      _bottomDanmakuItems.removeWhere((item) => (_tick - item.creationTime) >= staticDuration);
-      _specialDanmakuItems.removeWhere(
-        (item) => (_tick - item.creationTime) >= (item.content as SpecialDanmakuContentItem).duration,
-      );
+  void _removeExpired() {
+    final duration = _option.duration * 1000;
+    bool expired(DanmakuItem item) => _tick - item.creationTime >= duration;
+    for (final items in _scrollDanmakuByTrack.values) {
+      items.removeWhere(expired);
     }
-    _stopwatch.stop();
+    _scrollDanmakuByTrack.removeWhere((_, items) => items.isEmpty);
+    _topDanmakuItems.removeWhere(expired);
+    _bottomDanmakuItems.removeWhere(expired);
+    _specialDanmakuItems.removeWhere((item) {
+      final content = item.content as SpecialDanmakuContentItem;
+      if (_tick - item.creationTime < content.duration) return false;
+      content.painterCache?.dispose();
+      return true;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        if (constraints.maxWidth != _viewWidth || constraints.maxHeight != _viewHeight) {
+        if (constraints.maxWidth != _viewWidth ||
+            constraints.maxHeight != _viewHeight) {
           _viewWidth = constraints.maxWidth;
           _viewHeight = constraints.maxHeight;
           _calculateTracksGeometry();
         }
 
-        return Stack(
-          children: [
-            Positioned.fill(
-              child: ClipRect(
-                child: IgnorePointer(
-                  child: Opacity(
-                    opacity: _option.opacity,
-                    child: Stack(
-                      children: [
-                        RepaintBoundary(
-                          child: AnimatedBuilder(
-                            animation: _animationController,
-                            builder: (context, child) {
-                              return CustomPaint(
-                                size: Size(_viewWidth, _viewHeight),
-                                painter: ScrollDanmakuPainter(
-                                  _animationController.value,
-                                  _flattenedScrollDanmakus,
-                                  _option.duration,
-                                  _option.fontSize,
-                                  _option.fontWeight,
-                                  _option.showStroke,
-                                  _danmakuHeight,
-                                  _running,
-                                  _tick,
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
+        return RepaintBoundary(
+          child: ClipRect(
+            child: IgnorePointer(
+              child: Opacity(
+                opacity: _option.opacity,
+                child: CustomPaint(
+                  size: Size(_viewWidth, _viewHeight),
+                  painter: ScrollDanmakuPainter(
+                    _scrollDanmakuByTrack,
+                    _option.duration,
+                    _option.fontSize,
+                    _option.fontWeight,
+                    _option.showStroke,
+                    repaint: _repaint,
+                    clock: () => _tick,
                   ),
                 ),
               ),
             ),
-          ],
+          ),
         );
       },
     );

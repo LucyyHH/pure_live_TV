@@ -3,16 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:pure_live/pkg/canvas_danmaku/utils/utils.dart';
 
 class ScrollDanmakuPainter extends CustomPainter {
-  final double progress;
-  final List<DanmakuItem> scrollDanmakuItems;
+  final Map<double, List<DanmakuItem>> scrollDanmakuByTrack;
   final int danmakuDurationInSeconds;
   final double fontSize;
   final int fontWeight;
   final bool showStroke;
-  final double danmakuHeight;
-  final bool running;
-  final int tick;
   final double totalDuration;
+  final int Function() clock;
 
   static final Paint _selfSendPaint = Paint()
     ..style = PaintingStyle.stroke
@@ -20,57 +17,60 @@ class ScrollDanmakuPainter extends CustomPainter {
     ..color = Colors.green;
 
   ScrollDanmakuPainter(
-    this.progress,
-    this.scrollDanmakuItems,
+    this.scrollDanmakuByTrack,
     this.danmakuDurationInSeconds,
     this.fontSize,
     this.fontWeight,
-    this.showStroke,
-    this.danmakuHeight,
-    this.running,
-    this.tick,
-  ) : totalDuration = danmakuDurationInSeconds * 1000;
+    this.showStroke, {
+    super.repaint,
+    required this.clock,
+  }) : totalDuration = danmakuDurationInSeconds * 1000;
 
   @override
   void paint(Canvas canvas, Size size) {
+    final now = clock();
     final double startPosition = size.width;
 
-    for (final item in scrollDanmakuItems) {
-      final currentWidth = item.cachedWidth;
-      if (currentWidth == null) continue;
+    for (final items in scrollDanmakuByTrack.values) {
+      for (final item in items) {
+        final currentWidth = item.width;
 
-      final int elapsedTime = tick - item.creationTime;
-      final double timeProgress = elapsedTime / totalDuration;
+        final int elapsedTime = now - item.creationTime;
+        final double timeProgress = elapsedTime / totalDuration;
 
-      if (timeProgress >= 1.0 || timeProgress < 0) continue;
+        if (timeProgress >= 1.0 || timeProgress < 0) continue;
 
-      final double endPosition = -currentWidth;
-      final double currentX = startPosition + (endPosition - startPosition) * timeProgress;
+        final double endPosition = -currentWidth;
+        final double currentX =
+            startPosition + (endPosition - startPosition) * timeProgress;
 
-      item.xPosition = currentX;
+        item.xPosition = currentX;
 
-      if (currentX < -currentWidth || currentX > size.width) {
-        continue;
+        if (currentX < -currentWidth || currentX > size.width) {
+          continue;
+        }
+
+        final layout = item.layout ??= Utils.layout(
+          item.content,
+          fontSize,
+          fontWeight,
+          showStroke,
+        );
+        Utils.drawParagraph(
+          canvas,
+          layout,
+          Offset(currentX, item.yPosition),
+          item.content.selfSend,
+          _selfSendPaint,
+        );
       }
-
-      Utils.drawMixedContent(
-        canvas,
-        item.content,
-        Offset(currentX, item.yPosition),
-        fontSize,
-        fontWeight,
-        showStroke,
-        item.content.selfSend,
-        _selfSendPaint,
-      );
     }
   }
 
   @override
   bool shouldRepaint(covariant ScrollDanmakuPainter oldDelegate) {
-    return tick != oldDelegate.tick ||
-        scrollDanmakuItems.length != oldDelegate.scrollDanmakuItems.length ||
-        progress != oldDelegate.progress ||
+    return scrollDanmakuByTrack.length !=
+            oldDelegate.scrollDanmakuByTrack.length ||
         fontSize != oldDelegate.fontSize ||
         fontWeight != oldDelegate.fontWeight ||
         showStroke != oldDelegate.showStroke;
